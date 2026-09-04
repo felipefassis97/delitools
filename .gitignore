@@ -1,0 +1,10 @@
+# Binarios compilados do Delitools (nao versionar builds, so codigo-fonte)
+PrinterInstaller/Delitools.exe
+PrinterInstaller/Delitools_Setup_*.exe
+PrinterInstaller/Delitools_Portavel_*.zip
+
+# Pasta de staging usada so pra montar o zip portatil (duplica NetConfigTools)
+PrinterInstaller/DelitoolsPortavel/
+
+# Configuracoes locais do Claude Code (especificas desta maquina)
+.claude/settings.local.json

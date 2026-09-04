@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configs xmlns="http://www.epson.com/EpsonNet/Config/Option/1-4">
+  <AcceptLanguage default=""/>
+  <FontSize default="10" min="10" max="10"/>
+  <Timeout>
+    <GetData default="25" min="2" max="900"/>
+    <GetPeculiarPacket default="10000" min="2000" max="900000"/>
+    <GetlistinfoPacket default="25000" min="2000" max="900000"/>
+    <GetDetailPacket default="25000" min="2000" max="900000"/>
+    <OperationPacket default="25000" min="2000" max="900000"/>
+    <SetData default="25" min="2" max="900"/>
+    <SetDetailPacket default="25000" min="2000" max="900000"/>
+    <UnlockBase default="25000" min="2000" max="900000"/>
+    <UnlockPacket default="25000" min="2000" max="900000"/>
+    <LockPacket default="25000" min="2000" max="900000"/>
+    <FactResetUnlock default="25000" min="2000" max="900000"/>
+    <FactResetPacket default="25000" min="2000" max="900000"/>
+    <RebootStart default="10000" min="0"/>
+    <RebootFirstwait default="1000" min="0"/>
+    <RebootSecondwait default="15000" min="0"/>
+    <RebootUnder15 default="1000" min="0"/>
+    <RebootUnder30 default="2000" min="0"/>
+    <RebootUnder60 default="5000" min="0"/>
+    <RebootOver60 default="10000" min="0"/>
+    <RebootMax default="300" min="60" max="900"/>
+    <GetPowerMgmtPacket default="10000" min="2000" max="900000"/>
+    <RecoveryPowerSavingInterval default="1000" min="0"/>
+    <RecoveryPowerSavingMax default="30000" min="0"/>
+  </Timeout>
+  <Retry>
+    <GetPeculiarPacket default="1" min="0"/>
+    <GetlistinfoPacket default="1" min="0"/>
+    <GetDetailPacket default="1" min="0"/>
+    <OperationPacket default="1" min="0"/>
+    <SetDetailPacket default="1" min="0"/>
+    <UnlockPacket default="1" min="0"/>
+    <LockPacket default="1" min="0"/>
+    <FactResetPacket default="1" min="0"/>
+    <RebootFirstwait default="0" min="0"/>
+    <RebootSecondwait default="0" min="0"/>
+    <RebootUnder15 default="0" min="0"/>
+    <RebootUnder30 default="0" min="0"/>
+    <RebootUnder60 default="0" min="0"/>
+    <RebootOver60 default="0" min="0"/>
+    <RebootMax default="0" min="0"/>
+  </Retry>
+  <Probe>
+    <ENPC default="1" min="0" max="1"/>
+    <SLP default="1" min="0" max="1"/>
+    <UnicastSearch default="0" min="0" max="1"/>
+    <ExtendSearch default="0" min="0" max="1"/>
+    <TTL default="1" min="1" max="15"/>
+    <Interval default="2000"/>
+    <IPRangeSearch default="0" min="0" max="1"/>
+  </Probe>
+  <COM>
+    <Use default="0" min="0" max="1"/>
+    <No min="1" max="256"/>
+    <Rate default="9600" min="9600" max="115200"/>
+    <Parity default="0" min="0" max="2"/>
+    <Flow default="0" min="0" max="2"/>
+  </COM>
+  <MyDevice/>
+  <Filter default=""/>
+  <MainWindow>
+    <Xpos default="0"/>
+    <Ypos default="0"/>
+    <Width default="800" min="640"/>
+    <Height default="600" min="480"/>
+    <Maximized default="0" min="0" max="1"/>
+  </MainWindow>
+  <ColumnList>
+    <Column default="1" min="1" max="1" dataName="ModelName" width="180"/>
+    <Column default="1" min="1" max="1" dataName="MACAddress" width="120"/>
+    <Column default="1" min="0" max="1" dataName="IPAddress" width="120"/>
+    <Column default="0" min="0" max="1" dataName="MSPrintServer" width="120"/>
+    <Column default="0" min="0" max="1" dataName="SysLocation" width="120"/>
+    <Column default="0" min="0" max="1" dataName="MainBodyVersion" width="120"/>
+    <Column default="0" min="0" max="1" dataName="BonjourName" width="120"/>
+    <Column default="0" min="0" max="1" dataName="NetworkVersion" width="120"/>
+    <Column default="0" min="0" max="1" dataName="PrinterID" width="120"/>
+    <Column default="1" min="0" max="1" dataName="ProbedRoute" width="120"/>
+  </ColumnList>
+  <Log>
+    <Enable default="1" min="0" max="1"/>
+    <FilePath default=""/>
+    <FileSize default="1" min="1" max="2048"/>
+    <FileSizeOld/>
+    <FilePathChanged/>
+    <FileSizeChanged/>
+  </Log>
+  <Package>
+    <MainWindow>
+      <Xpos default="0"/>
+      <Ypos default="0"/>
+      <Width default="800" min="640"/>
+      <Height default="600" min="480"/>
+      <Maximized default="0" min="0" max="1"/>
+    </MainWindow>
+    <ColumnList>
+      <Column default="1" min="1" max="1" dataName="SetupState"/>
+      <Column default="1" min="1" max="1" dataName="ProcessStatus"/>
+      <Column default="1" min="1" max="1" dataName="Result"/>
+      <Column default="1" min="1" max="1" dataName="IPAddress"/>
+      <Column default="1" min="0" max="1" dataName="Info_ModelName" width="180"/>
+      <Column default="1" min="0" max="1" dataName="Info_MACAddress"/>
+      <Column default="1" min="0" max="1" dataName="TCPIP_IPAddress"/>
+    </ColumnList>
+    <AutoRelate>
+      <Key value="Info_MACAddress"/>
+    </AutoRelate>
+    <Output>
+      <SaveFormat default="0" min="0" max="1"/>
+      <FormatFilePath default=""/>
+    </Output>
+    <ErrorProc>
+      <ErrorSkip default="0" min="0" max="1"/>
+    </ErrorProc>
+    <Communication>
+      <ProbeMax default="300" min="30" max="600"/>
+    </Communication>
+    <RebootConfirm default="0" min="0" max="1"/>
+    <MaxRebootPollingNIFCount default="20" />
+  </Package>
+</Configs>

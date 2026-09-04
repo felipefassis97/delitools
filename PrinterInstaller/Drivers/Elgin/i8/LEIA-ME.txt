@@ -1,0 +1,20 @@
+﻿INSTRUCOES - Como adicionar o driver desta impressora
+=====================================================
+
+1. Acesse o site do fabricante e baixe o driver para Windows.
+2. Extraia o conteudo do ZIP nesta pasta.
+3. Certifique-se de que existe pelo menos um arquivo .inf aqui.
+
+O instalador ira buscar TODOS os arquivos .inf nesta pasta
+(inclusive subpastas) e instalar cada um via pnputil.
+
+Estrutura esperada de exemplo:
+  Drivers\
+    Epson\
+      TM-T88V\
+        driver.inf     <- o instalador usa este arquivo
+        driver.cat
+        driver.dll
+        ...
+
+Apos colocar os arquivos, execute install.ps1 como Administrador.
