@@ -1,4 +1,4 @@
-// Delitools v2.11.0
+// Delitools v2.12.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.11.0";
+    const string APP_VERSION     = "2.12.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -269,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.11.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.12.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -313,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.11.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.12.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1638,6 +1638,7 @@ class MainForm : Form {
             ThreadPool.QueueUserWorkItem(delegate(object st){
                 try{ CreatePrinter(name,false); }catch{}
                 bool okF=PrinterExists(name);
+                SendTelemetry("instalar_usb",okF?"ok":"falhou",name);
                 BeginInvoke((Action)(()=>{
                     AddBotBubble(okF?"Prontinho! \""+name+"\" foi instalada com sucesso, ja pode usar.":"Hmm, nao consegui confirmar que \""+name+"\" foi instalada de verdade. Da uma olhada no log detalhado na aba \"Instalar Impressora\" (modo tecnico) pra ver o que rolou — pode ter sido a porta USB ou o driver. Confere o cabo e a energia dela e tenta de novo comigo.");
                     AddOptions(ChatBack());
@@ -1657,6 +1658,7 @@ class MainForm : Form {
         ThreadPool.QueueUserWorkItem(delegate(object st){
             bool ok=false; try{ ok=RunNetworkInstall(ip,"9100",name,false); }catch{}
             bool okF=ok;
+            SendTelemetry("instalar_rede",okF?"ok":"falhou",ip);
             BeginInvoke((Action)(()=>{ AddBotBubble(okF?"Prontinho! Impressora de rede instalada com sucesso.":"Nao rolou dessa vez — confere se o IP esta certo e se a impressora esta ligada, e tenta de novo comigo."); AddOptions(ChatBack()); }));
         });
     }
@@ -1740,14 +1742,14 @@ class MainForm : Form {
         }
         opts.Add(new ChatOpt("Reiniciar o Spooler",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Ok, reiniciando o Spooler de impressao...");
-                ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(false); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, Spooler reiniciado. Tenta imprimir de novo pra ver se resolveu."); RefreshStatus(); AddOptions(ChatBack()); })); });
+                ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(false); SendTelemetry("reiniciar_spooler","ok",""); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, Spooler reiniciado. Tenta imprimir de novo pra ver se resolveu."); RefreshStatus(); AddOptions(ChatBack()); })); });
             }));
         opts.Add(new ChatOpt("Limpar fila de impressao",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Isso vai apagar todos os trabalhos que estao esperando na fila agora. Pode confirmar?");
                 AddOptions(
                     new ChatOpt("Sim, pode limpar",Cerr,true,()=>{
                         AddBotBubble("Certo, limpando a fila...");
-                        ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(true); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, fila limpa."); RefreshStatus(); AddOptions(ChatBack()); })); });
+                        ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(true); SendTelemetry("limpar_fila","ok",""); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, fila limpa."); RefreshStatus(); AddOptions(ChatBack()); })); });
                     }),
                     new ChatOpt("Deixa quieto, cancelar",Color.FromArgb(80,80,80),true,()=>{ AddBotBubble("Tranquilo, nao mexi em nada."); AddOptions(ChatBack()); })
                 );
@@ -1821,6 +1823,7 @@ class MainForm : Form {
         ThreadPool.QueueUserWorkItem(delegate(object st){
             bool drained=false; try{ drained=DoTestPageVerified(name); }catch{}
             bool okF=drained;
+            SendTelemetry("teste_pagina",okF?"ok":"preso_na_fila",name);
             BeginInvoke((Action)(()=>{
                 AddBotBubble(okF?"Prontinho, o teste saiu da fila — confere se o papel realmente imprimiu na impressora.":"Mandei o teste, mas ele ficou preso na fila e nao saiu — pode ser que a impressora esteja desligada, sem papel, ou com algum problema. Quer que eu tente diagnosticar?");
                 if(okF) AddOptions(ChatBack());
@@ -2087,6 +2090,7 @@ class MainForm : Form {
                 BeginInvoke((Action)(()=>AddBotBubble("Reconectou na porta "+np+"! Testando e ajustando a fila \""+printerName+"\"...")));
                 string ok=null; try{ ok=SafeRecreateQueue(printerName,new List<string>{np},driverName); }catch{}
                 string okF=ok;
+                SendTelemetry("reconectar_usb",okF!=null?"ok":"falhou",printerName);
                 BeginInvoke((Action)(()=>{
                     AddBotBubble(okF!=null?"Prontinho! A fila \""+printerName+"\" foi ajustada pra porta nova e o teste de impressao saiu certinho.":"A porta reconectou, mas o teste de impressao nao confirmou que saiu papel — pode ser driver, ou a impressora sem papel/com a tampa aberta. Nao mexi na fila antiga pra nao te deixar sem impressora.");
                     AddOptions(ChatBack());
@@ -2104,6 +2108,75 @@ class MainForm : Form {
         try{ RunPS("Add-MpPreference -ExclusionPath '"+folderPath.Replace("'","''")+"' -ErrorAction SilentlyContinue"); }catch{}
         try{ RunPS("Add-MpPreference -ExclusionProcess '"+exeFileName.Replace("'","''")+"' -ErrorAction SilentlyContinue"); }catch{}
         UILog("Exclusao de antivirus adicionada: "+folderPath);
+    }
+
+    // ── Telemetria opcional (portado do FudoPrintDoctor) ───────────────────────
+    // Silenciosa por completo: se nao tiver telemetria.txt do lado do exe, ou se a rede
+    // falhar, nao acontece nada (nao avisa, nao atrapalha o fluxo). A URL nunca fica no
+    // codigo/repositorio — vem de um arquivo local, exatamente pra evitar publicar um
+    // endpoint de escrita no GitHub publico.
+    string GetTelemetryUrl(){
+        try{
+            string path=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"telemetria.txt");
+            if(File.Exists(path)){ string u=File.ReadAllText(path).Trim(); if(u.Length>0) return u; }
+        }catch{}
+        return null;
+    }
+    // Id anonimo e estavel por maquina (hash do MachineGuid do Windows) — da pra saber que
+    // duas corridas vieram do mesmo PC sem saber de qual cliente/comercio e.
+    string GetPcId(){
+        string guid="";
+        try{ using(var k=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography")){ if(k!=null) guid=(k.GetValue("MachineGuid") as string)??""; } }catch{}
+        if(guid.Length==0) return "desconhecido";
+        try{
+            using(var sha=System.Security.Cryptography.SHA256.Create()){
+                var hash=sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(guid));
+                var sb=new System.Text.StringBuilder();
+                for(int i=0;i<8;i++) sb.Append(hash[i].ToString("x2"));
+                return sb.ToString();
+            }
+        }catch{ return "desconhecido"; }
+    }
+    string JsonEsc(string s){ if(s==null) return ""; return s.Replace("\\","\\\\").Replace("\"","\\\"").Replace("\n"," ").Replace("\r",""); }
+    void SendTelemetry(string acao,string resultado,string detalhe){
+        string url=GetTelemetryUrl();
+        if(string.IsNullOrEmpty(url)) return;
+        ThreadPool.QueueUserWorkItem(delegate(object st){
+            try{
+                var sb=new System.Text.StringBuilder();
+                sb.Append("{");
+                sb.Append("\"schemaVersion\":\"1.0\",");
+                sb.Append("\"pcId\":\""+JsonEsc(GetPcId())+"\",");
+                sb.Append("\"timestamp\":\""+DateTime.UtcNow.ToString("o")+"\",");
+                sb.Append("\"appVersion\":\""+JsonEsc(APP_VERSION)+"\",");
+                sb.Append("\"so\":\""+JsonEsc(Environment.OSVersion.VersionString)+"\",");
+                sb.Append("\"acao\":\""+JsonEsc(acao)+"\",");
+                sb.Append("\"resultado\":\""+JsonEsc(resultado)+"\",");
+                sb.Append("\"detalhe\":\""+JsonEsc(detalhe)+"\"");
+                sb.Append("}");
+                PostTelemetry(url,sb.ToString(),0);
+            }catch{}
+        });
+    }
+    // Apps Script (o receptor mais pratico, sem servidor proprio) responde /exec com um
+    // redirect 302 pra script.googleusercontent.com. Se a gente so seguir o redirect padrao,
+    // o POST vira GET no caminho e o corpo se perde — por isso segue manualmente, mantendo
+    // o metodo POST, exatamente como o FudoPrintDoctor documentou precisar fazer.
+    void PostTelemetry(string url,string jsonBody,int depth){
+        if(depth>3||string.IsNullOrEmpty(url)) return;
+        try{
+            byte[] data=System.Text.Encoding.UTF8.GetBytes(jsonBody);
+            var req=(System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
+            req.Method="POST"; req.ContentType="application/json"; req.Timeout=6000; req.AllowAutoRedirect=false;
+            using(var s=req.GetRequestStream()) s.Write(data,0,data.Length);
+            using(var resp=(System.Net.HttpWebResponse)req.GetResponse()){
+                int code=(int)resp.StatusCode;
+                if(code>=300&&code<400){
+                    string loc=resp.Headers["Location"];
+                    if(!string.IsNullOrEmpty(loc)) PostTelemetry(loc,jsonBody,depth+1);
+                }
+            }
+        }catch{}
     }
 
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }

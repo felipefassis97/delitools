@@ -8,3 +8,7 @@ PrinterInstaller/DelitoolsPortavel/
 
 # Configuracoes locais do Claude Code (especificas desta maquina)
 .claude/settings.local.json
+
+# URL de telemetria (endpoint de escrita) — nunca vai pro repositorio publico
+PrinterInstaller/telemetria.txt
+telemetria.txt

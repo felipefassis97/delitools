@@ -71,3 +71,18 @@ Requer [Inno Setup](https://jrsoftware.org/isinfo.php):
 ```powershell
 ISCC.exe PrinterInstaller\Delitools_Setup.iss
 ```
+
+## Diagnóstico inteligente
+
+Parte da lógica de diagnóstico foi portada do [fudo-print-doctor](https://github.com/Gartcia/fudo-print-doctor)
+(motor de suporte da Fudo, em PowerShell) pro chat da Dely:
+
+- Classifica dispositivo USB por nível de certeza (evita confundir mouse/hub com impressora) e
+  filtra impressoras virtuais (PDF/XPS/Fax) das listas de ação.
+- Avalia todas as filas instaladas e diagnostica só a que está com problema — não mexe nas saudáveis.
+- Reconexão guiada de USB com recriação segura de fila (testa antes de apagar a antiga, nunca
+  deixa o cliente sem fila).
+- Confirma impressora de rede de verdade (`DLE EOT 1`), não só "porta 9100 aberta".
+- Exclusão de antivírus antes de abrir ferramenta de fabricante não assinada.
+- Teste de página com confirmação real de que o trabalho saiu da fila.
+- [Telemetria opcional](docs/telemetria.md) — eventos por PC numa planilha, sem servidor próprio.
