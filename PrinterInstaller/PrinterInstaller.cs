@@ -1,4 +1,4 @@
-// Delitools v2.10.0
+// Delitools v2.11.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.10.0";
+    const string APP_VERSION     = "2.11.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -269,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.10.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.11.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -313,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.10.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.11.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1363,8 +1363,11 @@ class MainForm : Form {
         };
         btnOpenTool.Click+=(s,e)=>{
             if(cmbToolBrand.SelectedItem==null||cmbToolFile.SelectedItem==null){ lblToolsStatus.Text="Selecione a marca e a ferramenta."; lblToolsStatus.ForeColor=Cerr; return; }
-            string path=Path.Combine(netToolsRoot,cmbToolBrand.SelectedItem.ToString(),cmbToolFile.SelectedItem.ToString());
-            try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); lblToolsStatus.Text="Aberto: "+cmbToolFile.SelectedItem; lblToolsStatus.ForeColor=Cacc; Log("Ferramenta do fabricante aberta: "+path); }
+            string brandFolder=Path.Combine(netToolsRoot,cmbToolBrand.SelectedItem.ToString());
+            string fileName=cmbToolFile.SelectedItem.ToString();
+            string path=Path.Combine(brandFolder,fileName);
+            ExcludeFromDefender(brandFolder,fileName);
+            try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); lblToolsStatus.Text="Aberto: "+fileName; lblToolsStatus.ForeColor=Cacc; Log("Ferramenta do fabricante aberta: "+path); }
             catch(Exception ex){ lblToolsStatus.Text="Erro ao abrir: "+ex.Message; lblToolsStatus.ForeColor=Cerr; }
         };
         btnOpenFolder.Click+=(s,e)=>{
@@ -1474,6 +1477,8 @@ class MainForm : Form {
         if(!File.Exists(exe)) return "Erro: NetConfiguration.exe nao encontrado em NetConfigTools\\BIXOLON.";
         Process proc=null;
         try{
+            UILog("Automacao Bixolon: liberando no antivirus...");
+            ExcludeFromDefender(Path.GetDirectoryName(exe),"NetConfiguration.exe");
             UILog("Automacao Bixolon: abrindo NetConfiguration.exe...");
             proc=Process.Start(new ProcessStartInfo(exe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(exe)});
             IntPtr hMain=IntPtr.Zero;
@@ -1663,7 +1668,7 @@ class MainForm : Form {
         AddBotBubble("Essas sao as impressoras que voce tem instaladas:\n"+string.Join("\n",pp));
         AddBotBubble("Quer fazer algo com alguma delas?");
         AddOptions(
-            new ChatOpt("Imprimir teste em uma delas",Color.FromArgb(60,64,72),true,()=>ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Pronto, mandei uma pagina de teste pra "+n+"."); AddOptions(ChatBack()); })),
+            new ChatOpt("Imprimir teste em uma delas",Color.FromArgb(60,64,72),true,()=>ChatPickPrinter(pp,"imprimir teste em",(n)=>ChatRunVerifiedTest(n))),
             new ChatOpt("Definir uma como padrao",Color.FromArgb(60,64,72),true,()=>ChatPickPrinter(pp,"definir como padrao",(n)=>{ SetDefaultPrinter(n); AddBotBubble("Feito! "+n+" agora e a sua impressora padrao."); AddOptions(ChatBack()); })),
             new ChatOpt("Remover uma",Cerr,true,()=>ChatPickPrinter(pp,"remover",(n)=>ChatConfirmRemove(n))),
             ChatBack()
@@ -1808,7 +1813,20 @@ class MainForm : Form {
     void ChatMenuTestPage(){
         var pp=GetRealPrinters();
         if(pp.Length==0){ AddBotBubble("Voce ainda nao tem nenhuma impressora instalada pra eu testar."); AddOptions(new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),ChatBack()); return; }
-        ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Prontinho, mandei uma pagina de teste pra "+n+". Confere se saiu certinho."); AddOptions(ChatBack()); });
+        ChatPickPrinter(pp,"imprimir teste em",(n)=>ChatRunVerifiedTest(n));
+    }
+    // Manda o teste e so avisa sucesso depois de confirmar que saiu da fila de verdade.
+    void ChatRunVerifiedTest(string name){
+        AddBotBubble("Mandando um teste pra \""+name+"\"...");
+        ThreadPool.QueueUserWorkItem(delegate(object st){
+            bool drained=false; try{ drained=DoTestPageVerified(name); }catch{}
+            bool okF=drained;
+            BeginInvoke((Action)(()=>{
+                AddBotBubble(okF?"Prontinho, o teste saiu da fila — confere se o papel realmente imprimiu na impressora.":"Mandei o teste, mas ele ficou preso na fila e nao saiu — pode ser que a impressora esteja desligada, sem papel, ou com algum problema. Quer que eu tente diagnosticar?");
+                if(okF) AddOptions(ChatBack());
+                else AddOptions(new ChatOpt("Diagnosticar o problema",CaiAccent,true,()=>ChatMenuFix()),ChatBack());
+            }));
+        });
     }
 
     // --- Balancas: leitura ao vivo nao cabe em chat, leva pra tela dedicada ---
@@ -1840,13 +1858,19 @@ class MainForm : Form {
     }
     void OnChatManualConnected(string brand,string toolFolder){
         var files=GetNetToolFiles(toolFolder);
-        if(files.Count==0){ AddBotBubble("Que estranho, nao achei nenhum executavel em NetConfigTools\\"+toolFolder+". Confere se a ferramenta esta la."); }
-        else{
-            string path=Path.Combine(netToolsRoot,toolFolder,files[0]);
-            try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); AddBotBubble("Abri a ferramenta ("+files[0]+") pra voce. E so configurar o IP na janela que apareceu."); Log("Assistente (chat): ferramenta aberta - "+path); }
-            catch(Exception ex){ AddBotBubble("Nao consegui abrir a ferramenta: "+ex.Message); }
-        }
-        AddOptions(new ChatOpt("Terminei, voltar ao menu",Color.FromArgb(80,80,80),true,()=>StartChat()));
+        if(files.Count==0){ AddBotBubble("Que estranho, nao achei nenhum executavel em NetConfigTools\\"+toolFolder+". Confere se a ferramenta esta la."); AddOptions(new ChatOpt("Terminei, voltar ao menu",Color.FromArgb(80,80,80),true,()=>StartChat())); return; }
+        AddBotBubble("Ja libero ela no antivirus pra nao correr risco de bloquear, e abro em seguida...");
+        string brandFolder=Path.Combine(netToolsRoot,toolFolder);
+        string fileName=files[0];
+        ThreadPool.QueueUserWorkItem(delegate(object st){
+            try{ ExcludeFromDefender(brandFolder,fileName); }catch{}
+            BeginInvoke((Action)(()=>{
+                string path=Path.Combine(brandFolder,fileName);
+                try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); AddBotBubble("Abri a ferramenta ("+fileName+") pra voce. E so configurar o IP na janela que apareceu."); Log("Assistente (chat): ferramenta aberta - "+path); }
+                catch(Exception ex){ AddBotBubble("Nao consegui abrir a ferramenta: "+ex.Message); }
+                AddOptions(new ChatOpt("Terminei, voltar ao menu",Color.FromArgb(80,80,80),true,()=>StartChat()));
+            }));
+        });
     }
     void OnChatWantAuto(string brand,string toolFolder){
         AddBotBubble("Pode deixar comigo. Qual o IP novo que voce quer colocar na impressora?");
@@ -2069,6 +2093,17 @@ class MainForm : Form {
                 }));
             });
         }));
+    }
+
+    // ── Exclusao do Windows Defender (portado do FudoPrintDoctor) ──────────────
+    // Ferramentas de fabricante em NetConfigTools costumam ser .exe antigos e sem assinatura
+    // digital — exatamente o perfil que o Defender mais barra. Em vez de deixar o antivirus
+    // decidir depois de rodar, adiciona a exclusao ANTES, na pasta especifica da ferramenta
+    // (nao a pasta toda do Delitools) e no processo dela.
+    void ExcludeFromDefender(string folderPath,string exeFileName){
+        try{ RunPS("Add-MpPreference -ExclusionPath '"+folderPath.Replace("'","''")+"' -ErrorAction SilentlyContinue"); }catch{}
+        try{ RunPS("Add-MpPreference -ExclusionProcess '"+exeFileName.Replace("'","''")+"' -ErrorAction SilentlyContinue"); }catch{}
+        UILog("Exclusao de antivirus adicionada: "+folderPath);
     }
 
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }
@@ -2584,6 +2619,25 @@ class MainForm : Form {
             if(obj!=null)obj.InvokeMethod("PrintTestPage",null,null);
             Log(obj!=null?"Pagina de teste enviada!":"Impressora nao encontrada.");
         }catch(Exception ex){Log("Erro: "+ex.Message);}
+    }
+
+    // Confirma que o teste realmente SAIU da fila, nao so que o Windows aceitou o pedido —
+    // PrintTestPage sem erro so significa que o spooler recebeu (portado do FudoPrintDoctor:
+    // WritePrinter/PrintTestPage OK != o papel saiu). Chamar de uma thread de fundo, pois
+    // faz ate 8s de polling. Retorna false se o trabalho ainda estava preso na fila no fim.
+    bool DoTestPageVerified(string name){
+        int before=CountJobsFor(name);
+        DoTestPage(name);
+        int elapsed=0;
+        while(elapsed<8000){
+            System.Threading.Thread.Sleep(500); elapsed+=500;
+            int now=CountJobsFor(name);
+            if(now<=before) return true;
+        }
+        return false;
+    }
+    int CountJobsFor(string printerName){
+        try{ return new ManagementObjectSearcher("SELECT Name FROM Win32_PrintJob WHERE Name LIKE '"+printerName.Replace("'","''")+",%'").Get().Count; }catch{ return 0; }
     }
 
     void RestartSpooler(bool clear){
