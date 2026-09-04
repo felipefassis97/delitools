@@ -1,4 +1,4 @@
-// Delitools v2.8.0
+// Delitools v2.9.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.8.0";
+    const string APP_VERSION     = "2.9.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -269,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.8.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.9.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -313,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.8.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.9.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1685,9 +1685,11 @@ class MainForm : Form {
     // --- Corrigir impressao ---
     void ChatMenuFix(){
         List<QueueHealth> health=null; try{ health=GetQueueHealth(); }catch{}
+        QueueHealth? sickest=null;
         if(health!=null&&health.Count>0){
             var sick=health.FindAll(h=>h.Score>0);
             var healthy=health.FindAll(h=>h.Score==0);
+            if(sick.Count>0) sickest=sick[0];
             if(health.Count>1){
                 if(sick.Count>0){
                     var sb=new System.Text.StringBuilder("Dei uma olhada em todas as suas impressoras. A \""+sick[0].Name+"\" ta com problema: "+string.Join("; ",sick[0].Sintomas)+".");
@@ -1704,12 +1706,16 @@ class MainForm : Form {
         } else {
             AddBotBubble("Vamos resolver isso. O que esta acontecendo?");
         }
-        AddOptions(
-            new ChatOpt("Reiniciar o Spooler",Color.FromArgb(60,64,72),true,()=>{
+        var opts=new List<ChatOpt>();
+        if(sickest!=null&&!sickest.Value.PortoVivo){
+            var sk=sickest.Value;
+            opts.Add(new ChatOpt("Reconectar \""+sk.Name+"\" (recomendado)",CaiAccent,true,()=>ChatOfferReconnect(sk.Name,sk.Driver)));
+        }
+        opts.Add(new ChatOpt("Reiniciar o Spooler",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Ok, reiniciando o Spooler de impressao...");
                 ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(false); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, Spooler reiniciado. Tenta imprimir de novo pra ver se resolveu."); RefreshStatus(); AddOptions(ChatBack()); })); });
-            }),
-            new ChatOpt("Limpar fila de impressao",Color.FromArgb(60,64,72),true,()=>{
+            }));
+        opts.Add(new ChatOpt("Limpar fila de impressao",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Isso vai apagar todos os trabalhos que estao esperando na fila agora. Pode confirmar?");
                 AddOptions(
                     new ChatOpt("Sim, pode limpar",Cerr,true,()=>{
@@ -1718,16 +1724,15 @@ class MainForm : Form {
                     }),
                     new ChatOpt("Deixa quieto, cancelar",Color.FromArgb(80,80,80),true,()=>{ AddBotBubble("Tranquilo, nao mexi em nada."); AddOptions(ChatBack()); })
                 );
-            }),
-            new ChatOpt("Abrir Gerenciador de Dispositivos",Color.FromArgb(60,64,72),true,()=>{
+            }));
+        opts.Add(new ChatOpt("Abrir Gerenciador de Dispositivos",Color.FromArgb(60,64,72),true,()=>{
                 try{Process.Start("devmgmt.msc");}catch{}
                 AddBotBubble("Abri o Gerenciador de Dispositivos pra voce dar uma olhada.");
                 AddOptions(ChatBack());
-            }),
-            ChatBack()
-        );
+            }));
+        opts.Add(ChatBack());
+        AddOptions(opts.ToArray());
     }
-
     // --- Ferramentas ---
     void ChatMenuTools(){
         AddBotBubble("Tenho essas ferramentas aqui, qual voce precisa?");
@@ -1983,6 +1988,65 @@ class MainForm : Form {
         }catch{}
         result.Sort((a,b)=>b.Score.CompareTo(a.Score));
         return result;
+    }
+
+    // ── Reconexao guiada + recriacao segura de fila (portado do FudoPrintDoctor) ───
+    bool QueueIsEmpty(string name){
+        try{ return new ManagementObjectSearcher("SELECT Name FROM Win32_PrintJob WHERE Name LIKE '"+name.Replace("'","''")+",%'").Get().Count==0; }catch{ return true; }
+    }
+    // Recria uma fila que nao imprime em porta nenhuma: cria uma fila TEMPORARIA em cada porta
+    // candidata, manda um ticket ESC/POS real, e SO quando uma responde de verdade (fila
+    // esvaziou) e que apaga a antiga e renomeia a temporaria com o nome original — nunca deixa
+    // o cliente sem fila. Retorna a porta que funcionou, ou null se nenhuma funcionou (nesse
+    // caso nada foi alterado).
+    string SafeRecreateQueue(string originalName,IEnumerable<string> candidatePorts,string driverName){
+        foreach(var port in candidatePorts){
+            string tmpName="DELITOOLS-TEST-"+port;
+            try{ RunPS("Remove-Printer -Name '"+tmpName.Replace("'","''")+"'"); }catch{}
+            string err=RunPS("Add-Printer -Name '"+tmpName.Replace("'","''")+"' -DriverName '"+driverName.Replace("'","''")+"' -PortName '"+port+"'");
+            if(err.Trim().Length>0) continue;
+            bool sent=false;
+            try{ sent=SendRawBytes(tmpName,System.Text.Encoding.ASCII.GetBytes("\x1B@Delitools\n\n\n")); }catch{}
+            System.Threading.Thread.Sleep(1500);
+            bool drained=QueueIsEmpty(tmpName);
+            if(sent&&drained){
+                RunPS("Remove-Printer -Name '"+originalName.Replace("'","''")+"'");
+                RunPS("Rename-Printer -Name '"+tmpName.Replace("'","''")+"' -NewName '"+originalName.Replace("'","''")+"'");
+                return port;
+            }
+            try{ RunPS("Remove-Printer -Name '"+tmpName.Replace("'","''")+"'"); }catch{}
+        }
+        return null;
+    }
+    // Espera a pessoa desconectar/reconectar o cabo USB (a forma mais confiavel de resolver
+    // "estava instalada e parou de imprimir": Windows reenumera o dispositivo e da porta nova),
+    // detecta a porta que apareceu, e chama SafeRecreateQueue nela.
+    void ChatOfferReconnect(string printerName,string driverName){
+        AddBotBubble("Isso geralmente resolve desconectando e reconectando o cabo USB dela. Quando estiver pronto, desconecta e conecta de novo (pode ser na mesma porta ou em outra).");
+        AddOptions(new ChatOpt("Pronto, pode esperar",CaiAccent,true,()=>{
+            var before=GetLiveUsbPorts();
+            AddBotBubble("Beleza, vou ficar de olho por ate 2 minutos. Pode desconectar e reconectar agora.");
+            ThreadPool.QueueUserWorkItem(delegate(object st){
+                string newPort=null;
+                for(int i=0;i<40&&newPort==null;i++){
+                    System.Threading.Thread.Sleep(3000);
+                    var now=GetLiveUsbPorts();
+                    foreach(var p in now) if(!before.Contains(p)){ newPort=p; break; }
+                }
+                if(newPort==null){
+                    BeginInvoke((Action)(()=>{ AddBotBubble("Nao detectei nenhuma reconexao em 2 minutos. Confere se o cabo esta bem encaixado e me chama de novo quando quiser tentar outra vez."); AddOptions(ChatBack()); }));
+                    return;
+                }
+                string np=newPort;
+                BeginInvoke((Action)(()=>AddBotBubble("Reconectou na porta "+np+"! Testando e ajustando a fila \""+printerName+"\"...")));
+                string ok=null; try{ ok=SafeRecreateQueue(printerName,new List<string>{np},driverName); }catch{}
+                string okF=ok;
+                BeginInvoke((Action)(()=>{
+                    AddBotBubble(okF!=null?"Prontinho! A fila \""+printerName+"\" foi ajustada pra porta nova e o teste de impressao saiu certinho.":"A porta reconectou, mas o teste de impressao nao confirmou que saiu papel — pode ser driver, ou a impressora sem papel/com a tampa aberta. Nao mexi na fila antiga pra nao te deixar sem impressora.");
+                    AddOptions(ChatBack());
+                }));
+            });
+        }));
     }
 
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }
