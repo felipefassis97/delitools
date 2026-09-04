@@ -1,12 +1,12 @@
 [Setup]
 AppName=Delitools
-AppVersion=2.6.1
+AppVersion=2.7.0
 AppPublisher=Felipe Assis
-AppVerName=Delitools 2.6.1
+AppVerName=Delitools 2.7.0
 DefaultDirName={autopf}\Delitools
 DefaultGroupName=Delitools
 OutputDir=.
-OutputBaseFilename=Delitools_Setup_2.6.1
+OutputBaseFilename=Delitools_Setup_2.7.0
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin

@@ -1,4 +1,4 @@
-// Delitools v2.6.1
+// Delitools v2.7.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.6.1";
+    const string APP_VERSION     = "2.7.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -135,6 +135,93 @@ class MainForm : Form {
         {"04B8:0E15","Epson TM-T20"},  {"04B8:0007","Epson TM-U220"},
         {"0DD4:0003","Bematech MP-4200 TH"},
     };
+
+    // ── Classificacao de dispositivo USB (portado do FudoPrintDoctor) ──────────
+    // Decide se um dispositivo USB e realmente uma impressora, com nivel de certeza,
+    // pra evitar o classico falso-positivo de confundir mouse/hub/webcam com impressora.
+    static readonly HashSet<string> PrinterVids=new HashSet<string>(StringComparer.OrdinalIgnoreCase){
+        "04B8","1504","0519","2730","0A5F","0DD4","03F0","04A9","04F9","0924","043D","04E8"
+    };
+    static readonly Regex PrinterWordRx=new Regex(@"\b(printer|impressora|thermal|termica|receipt|ticket|comandera|usbprint|escpos|esc/pos)\b|\bPOS\b|\bPOS-?\d|\b(xp-?\d{2,3}|srp-?\d{2,3}|rpt-?\d{2,3}|tm-?[tu]?\d{2,3}|5890|80c|58mm|80mm)\b",RegexOptions.IgnoreCase);
+    static readonly Regex NonPrinterWordRx=new Regex(@"\b(mouse|mice|keyboard|teclado|hub|composite|compuesto|camera|webcam|audio|speaker|headset|micro[fp]ono|mass storage|armazenamento|disk|disco|flash|bluetooth|wireless receiver|receptor|hid|human interface|joystick|gamepad|scanner|escaner|network|ethernet|wi-?fi|modem|card reader|leitor de cartao|fingerprint|monitor|display|touch|graphics|serial converter|root hub|host controller)\b",RegexOptions.IgnoreCase);
+
+    struct PrinterCertainty{ public bool IsPrinter; public string Confidence,Reason; }
+    PrinterCertainty ClassifyUsbDevice(string name,string instanceId,string pnpClass,string service,string compatibleIds){
+        name=name??""; instanceId=instanceId??""; pnpClass=pnpClass??""; service=service??""; compatibleIds=compatibleIds??"";
+        if(Regex.IsMatch(instanceId,@"^USBPRINT\\",RegexOptions.IgnoreCase)) return new PrinterCertainty{IsPrinter=true,Confidence="alta",Reason="interface USBPRINT (usbprint.sys)"};
+        if(pnpClass.Equals("Printer",StringComparison.OrdinalIgnoreCase)) return new PrinterCertainty{IsPrinter=true,Confidence="alta",Reason="classe de dispositivo Printer"};
+        if(Regex.IsMatch(service,@"^usbprint$",RegexOptions.IgnoreCase)) return new PrinterCertainty{IsPrinter=true,Confidence="alta",Reason="driver usbprint"};
+        if(compatibleIds.IndexOf("USB\\Class_07",StringComparison.OrdinalIgnoreCase)>=0) return new PrinterCertainty{IsPrinter=true,Confidence="alta",Reason="classe USB 07h (Printer)"};
+
+        string probe=name+" "+instanceId;
+        if(NonPrinterWordRx.IsMatch(name)&&!PrinterWordRx.IsMatch(name)) return new PrinterCertainty{IsPrinter=false,Confidence="alta",Reason="o nome corresponde a outro tipo de dispositivo"};
+
+        string vid=""; var mv=Regex.Match(instanceId,@"VID_([0-9A-F]{4})",RegexOptions.IgnoreCase);
+        if(mv.Success) vid=mv.Groups[1].Value.ToUpper();
+        if(vid.Length>0&&PrinterVids.Contains(vid)) return new PrinterCertainty{IsPrinter=true,Confidence="media",Reason="VID_"+vid+" e de um fabricante de impressoras"};
+        if(PrinterWordRx.IsMatch(probe)) return new PrinterCertainty{IsPrinter=true,Confidence="baixa",Reason="o nome menciona impressora/POS"};
+        return new PrinterCertainty{IsPrinter=false,Confidence="alta",Reason="sem nenhum sinal de impressora"};
+    }
+    struct UsbPrinterCandidate{ public string Name,InstanceId,Confidence,Reason; }
+    List<UsbPrinterCandidate> ScanUsbPrinterCandidates(){
+        var result=new List<UsbPrinterCandidate>();
+        try{
+            foreach(ManagementObject o in new ManagementObjectSearcher("SELECT * FROM Win32_PnPEntity").Get()){
+                string devId=o["DeviceID"]!=null?o["DeviceID"].ToString():"";
+                if(devId.IndexOf("USB",StringComparison.OrdinalIgnoreCase)<0) continue;
+                string name=o["Name"]!=null?o["Name"].ToString():"";
+                string pnpClass=o["PNPClass"]!=null?o["PNPClass"].ToString():"";
+                string service=o["Service"]!=null?o["Service"].ToString():"";
+                string compat="";
+                try{ var ci=o["CompatibleID"] as string[]; if(ci!=null) compat=string.Join(" ",ci); }catch{}
+                var c=ClassifyUsbDevice(name,devId,pnpClass,service,compat);
+                if(c.IsPrinter) result.Add(new UsbPrinterCandidate{Name=name,InstanceId=devId,Confidence=c.Confidence,Reason=c.Reason});
+            }
+        }catch{}
+        return result;
+    }
+
+    // ── Impressoras virtuais (portado do FudoPrintDoctor) ───────────────────────
+    // PDF/XPS/Fax/OneNote e afins nao sao alvo real de diagnostico/instalacao.
+    static readonly string[] VirtualNamePatterns=new string[]{
+        "Microsoft Print to PDF","Microsoft XPS Document Writer","OneNote","Send To OneNote",
+        "Impressora virtual protegida","Fax","Adobe PDF","PDF24","CutePDF","PDFCreator","Bullzip",
+        "doPDF","Foxit.*PDF","Nitro.*PDF","novaPDF","PrimoPDF","Snagit","AnyDesk","TeamViewer",
+        "WPS PDF","Print to Evernote","Salvar como PDF","Microsoft Shared Fax","Quicken PDF","ImagePrinter"
+    };
+    static readonly string[] VirtualDriverPatterns=new string[]{
+        "Microsoft Print To PDF","Microsoft XPS Document Writer","Send to Microsoft OneNote",
+        "Microsoft Shared Fax Driver","PDF","XPS"
+    };
+    static readonly string[] VirtualPortPatterns=new string[]{
+        @"^PORTPROMPT:",@"^nul:?$",@"^NUL$",@"^SHRFAX:",@"^XPSPort:",@"^FILE:",@"^Microsoft\.Office\.OneNote",
+        @"^PDF",@"^C:\\",@"^\\\\"
+    };
+    bool IsVirtualPrinter(string name,string driverName,string portName,out string reason){
+        name=name??""; driverName=driverName??""; portName=portName??"";
+        foreach(var pat in VirtualNamePatterns) if(Regex.IsMatch(name,pat,RegexOptions.IgnoreCase)){ reason="nome bate com impressora virtual ("+pat+")"; return true; }
+        foreach(var pat in VirtualDriverPatterns) if(Regex.IsMatch(driverName,pat,RegexOptions.IgnoreCase)){ reason="driver virtual ("+driverName+")"; return true; }
+        foreach(var pat in VirtualPortPatterns) if(Regex.IsMatch(portName,pat,RegexOptions.IgnoreCase)){ reason="porta nao fisica ("+portName+")"; return true; }
+        reason=""; return false;
+    }
+    // Impressoras reais (exclui PDF/XPS/Fax/etc) — usado nos fluxos do chat, onde faz sentido
+    // esconder impressoras virtuais das opcoes (testar, remover, gaveta...). GetPrinters() sem
+    // filtro continua valendo pra backup/restauracao e pro inventario da tela manual.
+    string[] GetRealPrinters(){
+        var real=new List<string>();
+        try{
+            foreach(ManagementObject o in new ManagementObjectSearcher("SELECT * FROM Win32_Printer").Get()){
+                string n=o["Name"]!=null?o["Name"].ToString():"";
+                if(n.Length==0) continue;
+                string drv=o["DriverName"]!=null?o["DriverName"].ToString():"";
+                string pt=o["PortName"]!=null?o["PortName"].ToString():"";
+                string reason;
+                if(IsVirtualPrinter(n,drv,pt,out reason)) continue;
+                real.Add(n);
+            }
+        }catch{ return GetPrinters(); }
+        return real.ToArray();
+    }
 
     // ── State ────────────────────────────────────────────────
     bool connUsb=true; int activePage=0;
@@ -182,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.6.1 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.7.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -226,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.6.1", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.7.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1549,7 +1636,7 @@ class MainForm : Form {
 
     // --- Impressoras instaladas ---
     void ChatMenuInstalled(){
-        var pp=GetPrinters();
+        var pp=GetRealPrinters();
         if(pp.Length==0){ AddBotBubble("Olhei aqui e nao achei nenhuma impressora instalada ainda. Quer que eu te ajude a instalar uma?"); AddOptions(new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),ChatBack()); return; }
         AddBotBubble("Essas sao as impressoras que voce tem instaladas:\n"+string.Join("\n",pp));
         AddBotBubble("Quer fazer algo com alguma delas?");
@@ -1578,17 +1665,18 @@ class MainForm : Form {
     void ChatMenuDetect(){
         AddBotBubble("Deixa eu dar uma olhada no que ta conectado por USB...");
         ThreadPool.QueueUserWorkItem(delegate(object st){
-            DetRes? r=null; try{ r=DoDetect(); }catch{}
-            List<string[]> regPorts=null; try{ regPorts=GetUsbPrintRegistryPorts(); }catch{}
-            DetRes? rr=r; var rp=regPorts;
+            List<UsbPrinterCandidate> found=null; try{ found=ScanUsbPrinterCandidates(); }catch{}
+            var fr=found;
             BeginInvoke((Action)(()=>{
-                if(rr!=null){ var v=rr.Value; AddBotBubble("Achei uma aqui: "+v.Name+" ("+v.DevId+")"+(v.Model!=null?" — parece ser uma "+v.Model:"")+"."); }
-                else AddBotBubble("Nao consegui identificar nenhuma impressora especifica por VID/PID.");
-                if(rp!=null&&rp.Count>0){
-                    var sb=new System.Text.StringBuilder("De qualquer forma, esses sao os dispositivos USB de impressora que o Windows reconhece no seu sistema:\n");
-                    foreach(var p in rp) sb.Append(p[0]+" — "+p[1]+"\n");
+                if(fr==null||fr.Count==0){
+                    AddBotBubble("Nao achei nenhum dispositivo USB com cara de impressora — vale conferir se ela ta ligada e o cabo bem encaixado.");
+                } else {
+                    var sb=new System.Text.StringBuilder("Achei "+fr.Count+" dispositivo(s) USB que parecem impressora:\n");
+                    bool anyNotHigh=false;
+                    foreach(var f in fr){ sb.Append("- "+f.Name+" (certeza "+f.Confidence+")\n"); if(f.Confidence!="alta") anyNotHigh=true; }
                     AddBotBubble(sb.ToString().TrimEnd());
-                } else AddBotBubble("E nao achei nenhum dispositivo USB de impressora no sistema — vale conferir se ela ta ligada e o cabo bem encaixado.");
+                    if(anyNotHigh) AddBotBubble("Alguns eu identifiquei com certeza media ou baixa — vale voce confirmar visualmente se e mesmo a impressora antes de instalar.");
+                }
                 AddOptions(ChatBack());
             }));
         });
@@ -1661,7 +1749,7 @@ class MainForm : Form {
         });
     }
     void ChatToolsDrawer(){
-        var pp=GetPrinters();
+        var pp=GetRealPrinters();
         if(pp.Length==0){ AddBotBubble("Voce ainda nao tem nenhuma impressora instalada pra usar a gaveta."); AddOptions(ChatBack()); return; }
         ChatPickPrinter(pp,"usar pra abrir a gaveta",(n)=>{
             bool ok=SendRawBytes(n,new byte[]{0x1B,0x70,0x00,25,(byte)250});
@@ -1672,7 +1760,7 @@ class MainForm : Form {
 
     // --- Imprimir pagina de teste ---
     void ChatMenuTestPage(){
-        var pp=GetPrinters();
+        var pp=GetRealPrinters();
         if(pp.Length==0){ AddBotBubble("Voce ainda nao tem nenhuma impressora instalada pra eu testar."); AddOptions(new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),ChatBack()); return; }
         ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Prontinho, mandei uma pagina de teste pra "+n+". Confere se saiu certinho."); AddOptions(ChatBack()); });
     }
