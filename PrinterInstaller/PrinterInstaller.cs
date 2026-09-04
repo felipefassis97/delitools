@@ -1,4 +1,4 @@
-// Delitools v2.4.0
+// Delitools v2.4.1
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.4.0";
+    const string APP_VERSION     = "2.4.1";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -175,7 +175,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(0); RefreshStatus(); Log("Delitools v2.4.0 iniciado.");
+        ShowPage(0); RefreshStatus(); Log("Delitools v2.4.1 iniciado.");
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -219,7 +219,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.4.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.4.1", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Assistente"};
@@ -1465,7 +1465,11 @@ class MainForm : Form {
             AddBotBubble("Instalando \""+name+"\"... pode levar uns 20-30 segundos, aguenta ai.");
             ThreadPool.QueueUserWorkItem(delegate(object st){
                 try{ CreatePrinter(name,false); }catch{}
-                BeginInvoke((Action)(()=>{ AddBotBubble("Pronto! Confere em \"Ver impressoras instaladas\" se ela apareceu certinho."); AddOptions(ChatBack()); }));
+                bool okF=PrinterExists(name);
+                BeginInvoke((Action)(()=>{
+                    AddBotBubble(okF?"Pronto! \""+name+"\" foi instalada com sucesso.":"Nao consegui confirmar que \""+name+"\" foi instalada. Confira o log detalhado na aba \"Instalar Impressora\" pra ver o que aconteceu (ex: porta USB nao encontrada, driver, etc.) — pode tentar de novo depois de checar o cabo/energia da impressora.");
+                    AddOptions(ChatBack());
+                }));
             });
         }));
     }
@@ -1941,7 +1945,7 @@ class MainForm : Form {
                     ok=RunNetworkInstall(ip,portNum.Length>0?portNum:"9100",customName,setDef);
                 } else {
                     CreatePrinter(customName,setDef);
-                    ok=true;
+                    ok=PrinterExists(customName); // CreatePrinter e void — so confirmando que a fila existe de verdade
                 }
             } catch(Exception ex) {
                 ok=false; fatalErr=ex.GetType().Name+": "+ex.Message;
@@ -2258,6 +2262,7 @@ class MainForm : Form {
         try{foreach(ManagementObject o in new ManagementObjectSearcher("SELECT * FROM Win32_Printer").Get()) if(o["Name"]!=null){var n=o["Name"].ToString(); if(n!="")list.Add(n);}}catch{}
         return list.ToArray();
     }
+    bool PrinterExists(string name){ foreach(var p in GetPrinters()) if(p.Equals(name,StringComparison.OrdinalIgnoreCase)) return true; return false; }
 
     void RefreshStatus(){
         if(lblSpoolerDot==null) return;
