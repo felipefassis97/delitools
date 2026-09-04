@@ -1,4 +1,4 @@
-// Delitools v2.7.0
+// Delitools v2.8.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.7.0";
+    const string APP_VERSION     = "2.8.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -269,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.7.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.8.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -313,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.7.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.8.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1684,7 +1684,26 @@ class MainForm : Form {
 
     // --- Corrigir impressao ---
     void ChatMenuFix(){
-        AddBotBubble("Vamos resolver isso. O que esta acontecendo?");
+        List<QueueHealth> health=null; try{ health=GetQueueHealth(); }catch{}
+        if(health!=null&&health.Count>0){
+            var sick=health.FindAll(h=>h.Score>0);
+            var healthy=health.FindAll(h=>h.Score==0);
+            if(health.Count>1){
+                if(sick.Count>0){
+                    var sb=new System.Text.StringBuilder("Dei uma olhada em todas as suas impressoras. A \""+sick[0].Name+"\" ta com problema: "+string.Join("; ",sick[0].Sintomas)+".");
+                    if(healthy.Count>0) sb.Append(" As outras ("+string.Join(", ",healthy.ConvertAll(h=>h.Name).ToArray())+") estao funcionando normalmente, nao vou mexer nelas.");
+                    AddBotBubble(sb.ToString());
+                } else {
+                    AddBotBubble("Dei uma olhada nas suas "+health.Count+" impressoras e nenhuma delas parece ter problema agora. Me conta o que ta acontecendo, que eu tento ajudar mesmo assim:");
+                }
+            } else if(sick.Count>0){
+                AddBotBubble("Vi que a \""+sick[0].Name+"\" ta com problema: "+string.Join("; ",sick[0].Sintomas)+". Vamos resolver.");
+            } else {
+                AddBotBubble("Vamos resolver isso. O que esta acontecendo?");
+            }
+        } else {
+            AddBotBubble("Vamos resolver isso. O que esta acontecendo?");
+        }
         AddOptions(
             new ChatOpt("Reiniciar o Spooler",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Ok, reiniciando o Spooler de impressao...");
@@ -1887,6 +1906,83 @@ class MainForm : Form {
         btnRestart.Click+=(s,e)=>StartChat();
         cChat.Controls.Add(btnRestart);
         StartChat();
+    }
+
+    // ── Diagnostico multi-impressora (portado do FudoPrintDoctor) ──────────────
+    // Avalia TODAS as filas reais (sem virtuais) e da uma pontuacao de severidade pra cada
+    // uma — 0 = saudavel. A de maior pontuacao e a que deve ser diagnosticada; as saudaveis
+    // nao sao tocadas. Um local com caixa+cozinha nao deve ter a impressora sadia mexida so
+    // porque a outra esta com fila travada.
+    struct QueueHealth{ public string Name,Port,Driver,Estado; public int Score,Jobs; public List<string> Sintomas; public bool Offline,Pausada,PortoVivo; }
+
+    // Portas USBxxx que TEM um dispositivo presente agora — cruza o mapeamento historico do
+    // registro (Enum\USBPRINT, que guarda toda porta que ja existiu) contra quem esta
+    // realmente conectado neste momento (Win32_PnPEntity), pra nao achar que uma porta orfa
+    // de uma impressora ja desconectada ainda esta "viva".
+    HashSet<string> GetLiveUsbPorts(){
+        var live=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try{
+            var presentIds=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach(ManagementObject o in new ManagementObjectSearcher("SELECT DeviceID FROM Win32_PnPEntity").Get()){
+                var id=o["DeviceID"]!=null?o["DeviceID"].ToString():""; if(id.Length>0) presentIds.Add(id);
+            }
+            using(var root=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USBPRINT")){
+                if(root!=null) foreach(var devClass in root.GetSubKeyNames())
+                    using(var ck=root.OpenSubKey(devClass)){ if(ck==null) continue;
+                        foreach(var inst in ck.GetSubKeyNames()){
+                            string fullId="USBPRINT\\"+devClass+"\\"+inst;
+                            using(var dp=ck.OpenSubKey(inst+@"\Device Parameters")){
+                                if(dp==null) continue;
+                                var pv=dp.GetValue("PortName") as string;
+                                if(pv!=null&&pv.Length>0&&presentIds.Contains(fullId)) live.Add(pv);
+                            }
+                        }
+                    }
+            }
+        }catch{}
+        return live;
+    }
+
+    List<QueueHealth> GetQueueHealth(){
+        var result=new List<QueueHealth>();
+        var livePorts=GetLiveUsbPorts();
+        var jobCounts=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+        try{
+            foreach(ManagementObject j in new ManagementObjectSearcher("SELECT Name FROM Win32_PrintJob").Get()){
+                string jn=j["Name"]!=null?j["Name"].ToString():""; int comma=jn.IndexOf(',');
+                string pn=comma>0?jn.Substring(0,comma):jn;
+                if(pn.Length==0) continue;
+                jobCounts[pn]=jobCounts.ContainsKey(pn)?jobCounts[pn]+1:1;
+            }
+        }catch{}
+        try{
+            foreach(ManagementObject o in new ManagementObjectSearcher("SELECT * FROM Win32_Printer").Get()){
+                string name=o["Name"]!=null?o["Name"].ToString():""; if(name.Length==0) continue;
+                string drv=o["DriverName"]!=null?o["DriverName"].ToString():"";
+                string port=o["PortName"]!=null?o["PortName"].ToString():"";
+                string vreason; if(IsVirtualPrinter(name,drv,port,out vreason)) continue;
+
+                bool offline=false,pausada=false;
+                try{ offline=o["WorkOffline"]!=null&&(bool)o["WorkOffline"]; }catch{}
+                try{ int ps=o["PrinterState"]!=null?Convert.ToInt32(o["PrinterState"]):0; pausada=(ps&1)!=0; }catch{}
+                int jobs=jobCounts.ContainsKey(name)?jobCounts[name]:0;
+
+                bool portoVivo=true;
+                if(Regex.IsMatch(port,@"^USB\d+",RegexOptions.IgnoreCase)) portoVivo=livePorts.Contains(port);
+
+                int score=0; var sint=new List<string>();
+                if(jobs>=3){ score+=40; sint.Add(jobs+" trabalhos parados na fila"); }
+                else if(jobs>0){ score+=10; sint.Add(jobs+" trabalho(s) na fila"); }
+                if(!portoVivo){ score+=30; sint.Add("a porta "+port+" nao tem nenhum dispositivo conectado"); }
+                if(offline){ score+=25; sint.Add("marcada como sem conexao (offline)"); }
+                if(pausada){ score+=20; sint.Add("pausada"); }
+
+                string estado=score==0?"saudavel":(score>=40?"nao imprime":"com problemas");
+                result.Add(new QueueHealth{Name=name,Port=port,Driver=drv,Estado=estado,Score=score,Jobs=jobs,Sintomas=sint,Offline=offline,Pausada=pausada,PortoVivo=portoVivo});
+            }
+        }catch{}
+        result.Sort((a,b)=>b.Score.CompareTo(a.Score));
+        return result;
     }
 
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }
