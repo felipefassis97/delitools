@@ -1,4 +1,4 @@
-// Delitools v2.6.0
+// Delitools v2.6.1
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.6.0";
+    const string APP_VERSION     = "2.6.1";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -182,7 +182,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.6.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.6.1 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -226,7 +226,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.6.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.6.1", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -1495,14 +1495,14 @@ class MainForm : Form {
         pnlChatLog.Controls.Clear(); chatY=6;
         AddBotBubble("Oi, tudo bem? Eu sou a "+BotName+", assistente do Delitools. Me conta, no que eu posso te ajudar hoje?");
         AddOptions(
-            new ChatOpt("Instalar uma impressora",Cacc,true,()=>ChatMenuInstall()),
+            new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),
             new ChatOpt("Ver minhas impressoras instaladas",Color.FromArgb(60,64,72),true,()=>ChatMenuInstalled()),
-            new ChatOpt("Detectar o que esta conectado",Cblue,true,()=>ChatMenuDetect()),
-            new ChatOpt("Minha impressao esta com problema",Corange,true,()=>ChatMenuFix()),
+            new ChatOpt("Detectar o que esta conectado",Color.FromArgb(60,64,72),true,()=>ChatMenuDetect()),
+            new ChatOpt("Minha impressao esta com problema",Color.FromArgb(60,64,72),true,()=>ChatMenuFix()),
             new ChatOpt("Ferramentas (spooler, gaveta, backup)",Color.FromArgb(60,64,72),true,()=>ChatMenuTools()),
-            new ChatOpt("Imprimir uma pagina de teste",Cblue,true,()=>ChatMenuTestPage()),
+            new ChatOpt("Imprimir uma pagina de teste",Color.FromArgb(60,64,72),true,()=>ChatMenuTestPage()),
             new ChatOpt("Falar da balanca",Color.FromArgb(60,64,72),true,()=>ChatMenuScales()),
-            new ChatOpt("Trocar o IP de uma impressora de rede",Cpurple,true,()=>StartIpConfigChat())
+            new ChatOpt("Trocar o IP de uma impressora de rede",Color.FromArgb(60,64,72),true,()=>StartIpConfigChat())
         );
     }
 
@@ -1512,14 +1512,14 @@ class MainForm : Form {
         AddTextPrompt("ex: Balcao 1",(name)=>{
             AddBotBubble("Perfeito, \""+name+"\" anotado. Ela ta ligada no computador por USB ou por Rede (Ethernet/Wi-Fi)?");
             AddOptions(
-                new ChatOpt("USB",Cacc,true,()=>ChatInstallUsb(name)),
-                new ChatOpt("Rede",Cblue,true,()=>ChatInstallNetAskIp(name))
+                new ChatOpt("USB",CaiAccent,true,()=>ChatInstallUsb(name)),
+                new ChatOpt("Rede",Color.FromArgb(60,64,72),true,()=>ChatInstallNetAskIp(name))
             );
         });
     }
     void ChatInstallUsb(string name){
         AddBotBubble("Beleza. So confirma pra mim: a impressora ta ligada na tomada e com o cabo USB conectado nesse computador?");
-        AddOptions(new ChatOpt("Sim, pode instalar",Cacc,true,()=>{
+        AddOptions(new ChatOpt("Sim, pode instalar",CaiAccent,true,()=>{
             AddBotBubble("Show, deixa comigo. Instalando \""+name+"\"... pode levar uns 20-30 segundos, ja te aviso quando terminar.");
             ThreadPool.QueueUserWorkItem(delegate(object st){
                 try{ CreatePrinter(name,false); }catch{}
@@ -1550,12 +1550,12 @@ class MainForm : Form {
     // --- Impressoras instaladas ---
     void ChatMenuInstalled(){
         var pp=GetPrinters();
-        if(pp.Length==0){ AddBotBubble("Olhei aqui e nao achei nenhuma impressora instalada ainda. Quer que eu te ajude a instalar uma?"); AddOptions(new ChatOpt("Instalar uma impressora",Cacc,true,()=>ChatMenuInstall()),ChatBack()); return; }
+        if(pp.Length==0){ AddBotBubble("Olhei aqui e nao achei nenhuma impressora instalada ainda. Quer que eu te ajude a instalar uma?"); AddOptions(new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),ChatBack()); return; }
         AddBotBubble("Essas sao as impressoras que voce tem instaladas:\n"+string.Join("\n",pp));
         AddBotBubble("Quer fazer algo com alguma delas?");
         AddOptions(
-            new ChatOpt("Imprimir teste em uma delas",Cacc,true,()=>ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Pronto, mandei uma pagina de teste pra "+n+"."); AddOptions(ChatBack()); })),
-            new ChatOpt("Definir uma como padrao",Cblue,true,()=>ChatPickPrinter(pp,"definir como padrao",(n)=>{ SetDefaultPrinter(n); AddBotBubble("Feito! "+n+" agora e a sua impressora padrao."); AddOptions(ChatBack()); })),
+            new ChatOpt("Imprimir teste em uma delas",Color.FromArgb(60,64,72),true,()=>ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Pronto, mandei uma pagina de teste pra "+n+"."); AddOptions(ChatBack()); })),
+            new ChatOpt("Definir uma como padrao",Color.FromArgb(60,64,72),true,()=>ChatPickPrinter(pp,"definir como padrao",(n)=>{ SetDefaultPrinter(n); AddBotBubble("Feito! "+n+" agora e a sua impressora padrao."); AddOptions(ChatBack()); })),
             new ChatOpt("Remover uma",Cerr,true,()=>ChatPickPrinter(pp,"remover",(n)=>ChatConfirmRemove(n))),
             ChatBack()
         );
@@ -1598,21 +1598,21 @@ class MainForm : Form {
     void ChatMenuFix(){
         AddBotBubble("Vamos resolver isso. O que esta acontecendo?");
         AddOptions(
-            new ChatOpt("Reiniciar o Spooler",Cpurple,true,()=>{
+            new ChatOpt("Reiniciar o Spooler",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Ok, reiniciando o Spooler de impressao...");
                 ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(false); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, Spooler reiniciado. Tenta imprimir de novo pra ver se resolveu."); RefreshStatus(); AddOptions(ChatBack()); })); });
             }),
-            new ChatOpt("Limpar fila de impressao",Corange,true,()=>{
+            new ChatOpt("Limpar fila de impressao",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Isso vai apagar todos os trabalhos que estao esperando na fila agora. Pode confirmar?");
                 AddOptions(
-                    new ChatOpt("Sim, pode limpar",Corange,true,()=>{
+                    new ChatOpt("Sim, pode limpar",Cerr,true,()=>{
                         AddBotBubble("Certo, limpando a fila...");
                         ThreadPool.QueueUserWorkItem(delegate(object st){ RestartSpooler(true); BeginInvoke((Action)(()=>{ AddBotBubble("Pronto, fila limpa."); RefreshStatus(); AddOptions(ChatBack()); })); });
                     }),
                     new ChatOpt("Deixa quieto, cancelar",Color.FromArgb(80,80,80),true,()=>{ AddBotBubble("Tranquilo, nao mexi em nada."); AddOptions(ChatBack()); })
                 );
             }),
-            new ChatOpt("Abrir Gerenciador de Dispositivos",Cblue,true,()=>{
+            new ChatOpt("Abrir Gerenciador de Dispositivos",Color.FromArgb(60,64,72),true,()=>{
                 try{Process.Start("devmgmt.msc");}catch{}
                 AddBotBubble("Abri o Gerenciador de Dispositivos pra voce dar uma olhada.");
                 AddOptions(ChatBack());
@@ -1629,16 +1629,16 @@ class MainForm : Form {
                 AddBotBubble("O Spooler esta "+GetSpoolerStatus().ToLower()+", com "+GetQueueCount()+" documento(s) na fila.");
                 AddOptions(ChatBack());
             }),
-            new ChatOpt("Testar IP/porta de rede",Cblue,true,()=>ChatToolsPing()),
-            new ChatOpt("Abrir gaveta de dinheiro",Corange,true,()=>ChatToolsDrawer()),
-            new ChatOpt("Fazer backup das impressoras",Cacc,true,()=>{
+            new ChatOpt("Testar IP/porta de rede",Color.FromArgb(60,64,72),true,()=>ChatToolsPing()),
+            new ChatOpt("Abrir gaveta de dinheiro",Color.FromArgb(60,64,72),true,()=>ChatToolsDrawer()),
+            new ChatOpt("Fazer backup das impressoras",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Certo, fazendo o backup...");
                 ThreadPool.QueueUserWorkItem(delegate(object st){
                     string file=BackupPrinters(); bool failed=file.StartsWith("(falhou");
                     BeginInvoke((Action)(()=>{ AddBotBubble(failed?"Deu erro no backup: "+file:"Prontinho, salvei o backup em: "+file); AddOptions(ChatBack()); }));
                 });
             }),
-            new ChatOpt("Restaurar backup",Cpurple,true,()=>{
+            new ChatOpt("Restaurar backup",Color.FromArgb(60,64,72),true,()=>{
                 AddBotBubble("Beleza, escolhe o arquivo de backup na janela que vai abrir.");
                 var dlg=new OpenFileDialog{Title="Selecionar Backup",Filter="Backup|*.txt|Todos|*.*",FileName="PrinterBackup.txt"};
                 if(dlg.ShowDialog()==DialogResult.OK){
@@ -1673,14 +1673,14 @@ class MainForm : Form {
     // --- Imprimir pagina de teste ---
     void ChatMenuTestPage(){
         var pp=GetPrinters();
-        if(pp.Length==0){ AddBotBubble("Voce ainda nao tem nenhuma impressora instalada pra eu testar."); AddOptions(new ChatOpt("Instalar uma impressora",Cacc,true,()=>ChatMenuInstall()),ChatBack()); return; }
+        if(pp.Length==0){ AddBotBubble("Voce ainda nao tem nenhuma impressora instalada pra eu testar."); AddOptions(new ChatOpt("Instalar uma impressora",CaiAccent,true,()=>ChatMenuInstall()),ChatBack()); return; }
         ChatPickPrinter(pp,"imprimir teste em",(n)=>{ DoTestPage(n); AddBotBubble("Prontinho, mandei uma pagina de teste pra "+n+". Confere se saiu certinho."); AddOptions(ChatBack()); });
     }
 
     // --- Balancas: leitura ao vivo nao cabe em chat, leva pra tela dedicada ---
     void ChatMenuScales(){
         AddBotBubble("Balanca eu monitoro ao vivo numa tela dedicada (ela fica lendo o peso o tempo todo pela porta serial), aqui no chat nao rola direito. Clica ali que eu te levo pra la.");
-        AddOptions(new ChatOpt("Ir para Balancas",Cacc,true,()=>ShowPage(6)));
+        AddOptions(new ChatOpt("Ir para Balancas",CaiAccent,true,()=>ShowPage(6)));
     }
     void OnChatBrand(string brand){
         string toolFolder=BrandToolFolder(brand);
@@ -1692,8 +1692,8 @@ class MainForm : Form {
             bool autoOk=AutoConfigBrands.Contains(toolFolder);
             AddBotBubble("Pra "+brand+" eu tenho dois caminhos: quer que eu resolva tudo sozinha, ou prefere fazer voce mesmo com a ferramenta oficial do fabricante?");
             AddOptions(
-                new ChatOpt(autoOk?"Deixa que eu faco tudo":"Automatico (ainda nao disponivel)",autoOk?Corange:Color.FromArgb(150,150,150),autoOk,()=>OnChatWantAuto(brand,toolFolder)),
-                new ChatOpt("Prefiro fazer manual",Cblue,true,()=>OnChatWantManual(brand,toolFolder))
+                new ChatOpt(autoOk?"Deixa que eu faco tudo":"Automatico (ainda nao disponivel)",autoOk?CaiAccent:Color.FromArgb(150,150,150),autoOk,()=>OnChatWantAuto(brand,toolFolder)),
+                new ChatOpt("Prefiro fazer manual",Color.FromArgb(60,64,72),true,()=>OnChatWantManual(brand,toolFolder))
             );
         } else {
             AddBotBubble("Poxa, essa marca eu ainda nao conheço. Se voce adicionar a pasta dela em NetConfigTools (modo tecnico > Config IP), ou pedir pra ensinarem o protocolo dela pra mim, eu aprendo rapidinho.");
@@ -1702,7 +1702,7 @@ class MainForm : Form {
     }
     void OnChatWantManual(string brand,string toolFolder){
         AddBotBubble("Combinado. So preciso que voce conecte a impressora "+brand+" por cabo Ethernet direto nesse computador e ligue ela.");
-        AddOptions(new ChatOpt("Ja conectei",Cacc,true,()=>OnChatManualConnected(brand,toolFolder)));
+        AddOptions(new ChatOpt("Ja conectei",CaiAccent,true,()=>OnChatManualConnected(brand,toolFolder)));
     }
     void OnChatManualConnected(string brand,string toolFolder){
         var files=GetNetToolFiles(toolFolder);
@@ -1725,7 +1725,7 @@ class MainForm : Form {
             return;
         }
         AddBotBubble("Anotado: "+newIp+". Agora conecta a impressora "+brand+" por cabo Ethernet direto nesse computador e liga ela.");
-        AddOptions(new ChatOpt("Ja conectei, pode automatizar",Corange,true,()=>RunChatAutoBot(brand,toolFolder,newIp)));
+        AddOptions(new ChatOpt("Ja conectei, pode automatizar",CaiAccent,true,()=>RunChatAutoBot(brand,toolFolder,newIp)));
     }
     void RunChatAutoBot(string brand,string toolFolder,string newIp){
         AddBotBubble("Beleza, vou abrir a ferramenta da "+brand+" e configurar sozinha. So nao mexe na janela dela enquanto eu trabalho, ta?");
@@ -1750,7 +1750,7 @@ class MainForm : Form {
             return;
         }
         AddBotBubble("Show, anotei tudo. Agora conecta a impressora "+brand+" por cabo Ethernet direto nesse computador e liga ela.");
-        AddOptions(new ChatOpt("Ja conectei, pode automatizar",Cacc,true,()=>RunChatNativeAuto(brand,curIp,newIp)));
+        AddOptions(new ChatOpt("Ja conectei, pode automatizar",CaiAccent,true,()=>RunChatNativeAuto(brand,curIp,newIp)));
     }
     void RunChatNativeAuto(string brand,string curIp,string newIp){
         AddBotBubble("Configurando "+curIp+" para "+newIp+", so um instante...");
