@@ -1,4 +1,4 @@
-// Delitools v2.2.0
+// Delitools v2.3.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.2.0";
+    const string APP_VERSION     = "2.3.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -156,6 +156,7 @@ class MainForm : Form {
     CheckBox chkSetDefault;
     System.Windows.Forms.Timer refreshTimer;
     string tempIpActive,tempIpAdapter; // IP secundario temporario (Config IP) ainda nao confirmado/removido
+    Panel pnlChatLog; int chatY,chatWidth; // area de conversa do Assistente (chat)
     SerialPort scalePort;
     System.Text.StringBuilder scaleBuf=new System.Text.StringBuilder();
     readonly object scaleBufLock=new object();
@@ -174,7 +175,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(0); RefreshStatus(); Log("Delitools v2.2.0 iniciado.");
+        ShowPage(0); RefreshStatus(); Log("Delitools v2.3.0 iniciado.");
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -218,10 +219,10 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.2.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.3.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
-        string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP"};
+        string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Assistente"};
         navItems=new Panel[lbl.Length]; navLabels=new Label[lbl.Length];
         for(int i=0;i<lbl.Length;i++){
             int idx=i;
@@ -263,10 +264,11 @@ class MainForm : Form {
     }
 
     void BuildPages(){
-        pages=new Panel[8];
-        for(int i=0;i<8;i++){pages[i]=new Panel{Location=new Point(CX,0),Size=new Size(CW,FH),BackColor=Cbg,Visible=false,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right,AutoScroll=true}; Controls.Add(pages[i]);}
+        pages=new Panel[9];
+        for(int i=0;i<9;i++){pages[i]=new Panel{Location=new Point(CX,0),Size=new Size(CW,FH),BackColor=Cbg,Visible=false,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right,AutoScroll=true}; Controls.Add(pages[i]);}
         BuildInstallPage(); BuildInstalledPage(); BuildDetectPage(); BuildFixPage();
         BuildToolsPage(); BuildTestPage(); BuildScalesPage(); BuildNetConfigPage();
+        BuildAssistantPage();
     }
 
     // ════════════════════════════════════════════════════════
@@ -1174,11 +1176,10 @@ class MainForm : Form {
         cTools.Controls.AddRange(new Control[]{btnOpenTool,btnOpenFolder,btnAutoConfig});
         var lblToolsStatus=new Label{Text="",Font=new Font("Segoe UI",8),ForeColor=Csub,Location=new Point(10,106),Size=new Size(cTools.Width-20,18),AutoSize=false};
         cTools.Controls.Add(lblToolsStatus);
-        // Marcas com automacao de UI implementada (clica sozinho na ferramenta do fabricante).
-        // So funciona pra impressora ligada por cabo Ethernet direto no PC, mesma exigencia da
-        // aba "Via Ethernet" acima — as ferramentas de fabricante buscam na rede local.
-        var autoConfigSupported=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"BIXOLON"};
-        Action updateAutoBtn=()=>{ btnAutoConfig.Enabled=cmbToolBrand.SelectedItem!=null&&autoConfigSupported.Contains(cmbToolBrand.SelectedItem.ToString()); };
+        // Marcas com automacao de UI implementada (AutoConfigBrands, nivel de classe) — clica
+        // sozinho na ferramenta do fabricante. So funciona pra impressora ligada por cabo Ethernet
+        // direto no PC, mesma exigencia da aba "Via Ethernet" acima.
+        Action updateAutoBtn=()=>{ btnAutoConfig.Enabled=cmbToolBrand.SelectedItem!=null&&AutoConfigBrands.Contains(cmbToolBrand.SelectedItem.ToString()); };
         Action refreshToolBrands=()=>{
             cmbToolBrand.Items.Clear(); cmbToolFile.Items.Clear();
             foreach(var b in GetNetToolBrands()) cmbToolBrand.Items.Add(b);
@@ -1222,17 +1223,6 @@ class MainForm : Form {
         var pnlWiz=new Panel{Location=new Point(10,36),Size=new Size(cWiz.Width-20,cWiz.Height-46),BackColor=Color.Transparent};
         cWiz.Controls.Add(pnlWiz);
 
-        string[] nativeBrands=new string[]{"XPrinter","Epson","Elgin","Bematech"};
-        Func<string,bool> brandIsNative=(b)=>{ foreach(var n in nativeBrands) if(n.Equals(b,StringComparison.OrdinalIgnoreCase)) return true; return false; };
-        Func<string,string> brandToolFolder=(b)=>{ foreach(var f in GetNetToolBrands()) if(f.Equals(b,StringComparison.OrdinalIgnoreCase)) return f; return null; };
-        Func<List<string>> wizBrandList=()=>{
-            var outp=new List<string>();
-            foreach(var b in nativeBrands) outp.Add(b);
-            foreach(var f in GetNetToolBrands()){ bool dup=false; foreach(var o in outp) if(o.Equals(f,StringComparison.OrdinalIgnoreCase)){dup=true;break;} if(!dup) outp.Add(f); }
-            outp.Sort();
-            return outp;
-        };
-
         int wizStep=0; string wizBrand=null,wizMode=null;
         Action renderWizard=null;
         renderWizard=()=>{
@@ -1246,22 +1236,22 @@ class MainForm : Form {
 
             if(wizStep==0){
                 addTxt("1. Qual a marca da impressora?",30,FontStyle.Bold,Ctxt);
-                foreach(var b in wizBrandList()){
+                foreach(var b in GetAllBrandNames()){
                     string bb=b;
                     addBtn(bb,Color.FromArgb(60,64,72),true,()=>{ wizBrand=bb; wizStep=1; renderWizard(); });
                 }
             }
             else if(wizStep==1){
                 addTxt("Marca: "+wizBrand,20,FontStyle.Bold,Ctxt);
-                string toolFolder=brandToolFolder(wizBrand);
-                if(brandIsNative(wizBrand)&&toolFolder==null){
+                string toolFolder=BrandToolFolder(wizBrand);
+                if(BrandIsNative(wizBrand)&&toolFolder==null){
                     addTxt("Essa marca ja e configurada automaticamente pelo Delitools. Preencha 'Novo IP' a esquerda e clique em 'Aplicar (Set New IP)' — nao precisa de ferramenta externa.",90,FontStyle.Regular,Csub);
                     addBtn("Recomecar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; renderWizard(); });
                 } else if(toolFolder!=null){
-                    if(brandIsNative(wizBrand)) addTxt("Essa marca tem suporte nativo automatico (campos a esquerda). Pra usar a ferramenta oficial mesmo assim, escolha abaixo:",60,FontStyle.Regular,Csub);
+                    if(BrandIsNative(wizBrand)) addTxt("Essa marca tem suporte nativo automatico (campos a esquerda). Pra usar a ferramenta oficial mesmo assim, escolha abaixo:",60,FontStyle.Regular,Csub);
                     else addTxt("Essa marca nao tem protocolo nativo suportado — precisa da ferramenta oficial do fabricante.",50,FontStyle.Regular,Csub);
                     addBtn("Manual — eu mesmo configuro",Cblue,true,()=>{ wizMode="manual"; wizStep=2; renderWizard(); });
-                    bool autoOk=autoConfigSupported.Contains(toolFolder);
+                    bool autoOk=AutoConfigBrands.Contains(toolFolder);
                     addBtn(autoOk?"Automatico (Beta)":"Automatico (ainda nao disponivel)",autoOk?Corange:Color.FromArgb(150,150,150),autoOk,()=>{ wizMode="auto"; wizStep=2; renderWizard(); });
                     addBtn("Voltar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; renderWizard(); });
                 } else {
@@ -1275,7 +1265,7 @@ class MainForm : Form {
                 addBtn("Voltar",Color.FromArgb(80,80,80),true,()=>{ wizStep=1; renderWizard(); });
             }
             else if(wizStep==3){
-                string toolFolder=brandToolFolder(wizBrand);
+                string toolFolder=BrandToolFolder(wizBrand);
                 addTxt("3. "+(wizMode=="manual"?"Configuracao manual":"Configuracao automatica")+" — "+wizBrand,20,FontStyle.Bold,Ctxt);
                 var lblResult=new Label{Text="",Font=new Font("Segoe UI",8.5f),ForeColor=Csub,Location=new Point(0,yy),Size=new Size(ww,100),AutoSize=false};
                 pnlWiz.Controls.Add(lblResult); yy+=106;
@@ -1373,6 +1363,181 @@ class MainForm : Form {
         }
     }
 
+    // ════════════════════════════════════════════════════════
+    //  ASSISTENTE (CHAT) — mesma decisao do Assistente Guiado (marca -> manual/automatico),
+    //  so que como conversa, numa area separada, com tudo automatizado exceto quando o
+    //  usuario escolhe fazer manual (ai so abre a ferramenta certa, igual ao wizard).
+    // ════════════════════════════════════════════════════════
+    struct ChatOpt{ public string Label; public Color Col; public bool Enabled; public Action OnClick; public ChatOpt(string l,Color c,bool e,Action a){Label=l;Col=c;Enabled=e;OnClick=a;} }
+
+    int MeasureTextHeight(string text,Font f,int width){
+        var sz=TextRenderer.MeasureText(text,f,new Size(width,int.MaxValue),TextFormatFlags.WordBreak|TextFormatFlags.Left);
+        return sz.Height;
+    }
+    void ChatScrollToBottom(Control last){ try{ pnlChatLog.ScrollControlIntoView(last); }catch{} }
+    void AddBotBubble(string text){
+        int bw=(int)(chatWidth*0.74); var f=new Font("Segoe UI",9);
+        int h=MeasureTextHeight(text,f,bw-24)+22;
+        var p=new Panel{Location=new Point(4,chatY),Size=new Size(bw,h),BackColor=Color.FromArgb(238,240,242)};
+        p.Region=Region.FromHrgn(CreateRoundRectRgn(0,0,bw,h,14,14));
+        p.Controls.Add(new Label{Text=text,Font=f,ForeColor=Ctxt,Location=new Point(12,10),Size=new Size(bw-24,h-20),AutoSize=false});
+        pnlChatLog.Controls.Add(p); chatY+=h+12; ChatScrollToBottom(p);
+    }
+    void AddUserBubble(string text){
+        int bw=(int)(chatWidth*0.74); var f=new Font("Segoe UI",9,FontStyle.Bold);
+        int h=MeasureTextHeight(text,f,bw-24)+22;
+        var p=new Panel{Location=new Point(chatWidth-bw-4,chatY),Size=new Size(bw,h),BackColor=Cacc};
+        p.Region=Region.FromHrgn(CreateRoundRectRgn(0,0,bw,h,14,14));
+        p.Controls.Add(new Label{Text=text,Font=f,ForeColor=Color.White,Location=new Point(12,10),Size=new Size(bw-24,h-20),AutoSize=false});
+        pnlChatLog.Controls.Add(p); chatY+=h+12; ChatScrollToBottom(p);
+    }
+    void AddOptions(params ChatOpt[] opts){
+        int bw=(int)(chatWidth*0.74);
+        var buttons=new List<Button>();
+        for(int i=0;i<opts.Length;i++){
+            var b=Btn(opts[i].Label,new Point(4,chatY),new Size(bw,30),opts[i].Col); b.Enabled=opts[i].Enabled;
+            buttons.Add(b); pnlChatLog.Controls.Add(b); chatY+=36;
+        }
+        for(int i=0;i<opts.Length;i++){
+            var opt=opts[i];
+            buttons[i].Click+=(s,e)=>{ foreach(var bb in buttons) bb.Enabled=false; AddUserBubble(opt.Label); opt.OnClick(); };
+        }
+        if(buttons.Count>0) ChatScrollToBottom(buttons[buttons.Count-1]);
+        chatY+=6;
+    }
+    void AddTextPrompt(string hint,Action<string> onSubmit){
+        int bw=(int)(chatWidth*0.74);
+        var tb=new TextBox{Location=new Point(4,chatY+2),Size=new Size(bw-72,26),Font=new Font("Segoe UI",9)};
+        var btn=Btn("Enviar",new Point(4+bw-64,chatY),new Size(64,30),Cacc);
+        pnlChatLog.Controls.Add(tb); pnlChatLog.Controls.Add(btn); chatY+=40;
+        Action submit=()=>{
+            string v=tb.Text.Trim(); if(v.Length==0) return;
+            tb.Enabled=false; btn.Enabled=false;
+            AddUserBubble(v);
+            onSubmit(v);
+        };
+        btn.Click+=(s,e)=>submit();
+        tb.KeyDown+=(s,e)=>{ if(e.KeyCode==Keys.Enter){ e.SuppressKeyPress=true; submit(); } };
+        ChatScrollToBottom(tb);
+        tb.Focus();
+    }
+
+    void StartChat(){
+        pnlChatLog.Controls.Clear(); chatY=6;
+        AddBotBubble("Oi! Posso te ajudar a trocar o IP de uma impressora de rede. Qual a marca dela?");
+        var opts=new List<ChatOpt>();
+        foreach(var b in GetAllBrandNames()){ string bb=b; opts.Add(new ChatOpt(bb,Color.FromArgb(60,64,72),true,()=>OnChatBrand(bb))); }
+        AddOptions(opts.ToArray());
+    }
+    void OnChatBrand(string brand){
+        string toolFolder=BrandToolFolder(brand);
+        bool native=BrandIsNative(brand);
+        if(native&&toolFolder==null){
+            AddBotBubble(brand+" eu configuro automaticamente, sem precisar de ferramenta externa. Qual o IP atual dela?");
+            AddTextPrompt("ex: 192.168.123.100",(curIp)=>OnChatNativeCurIp(brand,curIp));
+        } else if(toolFolder!=null){
+            bool autoOk=AutoConfigBrands.Contains(toolFolder);
+            AddBotBubble("Prefere que eu faca tudo sozinho, ou prefere fazer manualmente com a ferramenta oficial da "+brand+"?");
+            AddOptions(
+                new ChatOpt(autoOk?"Automatico — eu faco tudo":"Automatico (ainda nao disponivel)",autoOk?Corange:Color.FromArgb(150,150,150),autoOk,()=>OnChatWantAuto(brand,toolFolder)),
+                new ChatOpt("Manual — eu mesmo configuro",Cblue,true,()=>OnChatWantManual(brand,toolFolder))
+            );
+        } else {
+            AddBotBubble("Nao tenho essa marca cadastrada ainda. Adiciona a pasta dela em NetConfigTools (tela Config IP) ou peca pra implementar o protocolo dela.");
+            AddOptions(new ChatOpt("Recomecar",Color.FromArgb(80,80,80),true,()=>StartChat()));
+        }
+    }
+    void OnChatWantManual(string brand,string toolFolder){
+        AddBotBubble("Show. Conecta a impressora "+brand+" por cabo Ethernet direto nesse computador e liga ela.");
+        AddOptions(new ChatOpt("Ja conectei",Cacc,true,()=>OnChatManualConnected(brand,toolFolder)));
+    }
+    void OnChatManualConnected(string brand,string toolFolder){
+        var files=GetNetToolFiles(toolFolder);
+        if(files.Count==0){ AddBotBubble("Nao achei nenhum executavel em NetConfigTools\\"+toolFolder+"."); }
+        else{
+            string path=Path.Combine(netToolsRoot,toolFolder,files[0]);
+            try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); AddBotBubble("Abri a ferramenta ("+files[0]+") pra voce. Configure o IP na janela que apareceu."); Log("Assistente (chat): ferramenta aberta - "+path); }
+            catch(Exception ex){ AddBotBubble("Erro ao abrir a ferramenta: "+ex.Message); }
+        }
+        AddOptions(new ChatOpt("Concluido, recomecar",Color.FromArgb(80,80,80),true,()=>StartChat()));
+    }
+    void OnChatWantAuto(string brand,string toolFolder){
+        AddBotBubble("Beleza, eu cuido disso. Qual o novo IP que devo colocar na impressora?");
+        AddTextPrompt("ex: 192.168.1.50",(newIp)=>OnChatGotNewIpAuto(brand,toolFolder,newIp));
+    }
+    void OnChatGotNewIpAuto(string brand,string toolFolder,string newIp){
+        if(!Regex.IsMatch(newIp,@"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")){
+            AddBotBubble("Esse IP nao parece valido. Formato: 192.168.1.50 — tenta de novo?");
+            AddTextPrompt("ex: 192.168.1.50",(ni)=>OnChatGotNewIpAuto(brand,toolFolder,ni));
+            return;
+        }
+        AddBotBubble("Anotado: "+newIp+". Conecta a impressora "+brand+" por cabo Ethernet direto nesse computador e liga ela.");
+        AddOptions(new ChatOpt("Ja conectei, pode automatizar",Corange,true,()=>RunChatAutoBot(brand,toolFolder,newIp)));
+    }
+    void RunChatAutoBot(string brand,string toolFolder,string newIp){
+        AddBotBubble("Automatizando... isso vai abrir a ferramenta da "+brand+" e clicar sozinho. Nao mexe na janela dela enquanto isso.");
+        ThreadPool.QueueUserWorkItem(delegate(object st){
+            string r=toolFolder.Equals("BIXOLON",StringComparison.OrdinalIgnoreCase)?AutoConfigBixolon(newIp,"255.255.255.0","0.0.0.0"):"Automacao ainda nao implementada pra essa marca.";
+            BeginInvoke((Action)(()=>{ AddBotBubble(r); AddOptions(new ChatOpt("Recomecar",Color.FromArgb(80,80,80),true,()=>StartChat())); }));
+        });
+    }
+    void OnChatNativeCurIp(string brand,string curIp){
+        if(!Regex.IsMatch(curIp,@"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")){
+            AddBotBubble("Esse IP nao parece valido. Formato: 192.168.123.100 — tenta de novo?");
+            AddTextPrompt("ex: 192.168.123.100",(ci)=>OnChatNativeCurIp(brand,ci));
+            return;
+        }
+        AddBotBubble("Beleza. E qual o novo IP que devo colocar?");
+        AddTextPrompt("ex: 192.168.1.50",(newIp)=>OnChatNativeNewIp(brand,curIp,newIp));
+    }
+    void OnChatNativeNewIp(string brand,string curIp,string newIp){
+        if(!Regex.IsMatch(newIp,@"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")){
+            AddBotBubble("Esse IP nao parece valido. Formato: 192.168.1.50 — tenta de novo?");
+            AddTextPrompt("ex: 192.168.1.50",(ni)=>OnChatNativeNewIp(brand,curIp,ni));
+            return;
+        }
+        AddBotBubble("Anotado. Conecta a impressora "+brand+" por cabo Ethernet direto nesse computador e liga ela.");
+        AddOptions(new ChatOpt("Ja conectei, pode automatizar",Cacc,true,()=>RunChatNativeAuto(brand,curIp,newIp)));
+    }
+    void RunChatNativeAuto(string brand,string curIp,string newIp){
+        AddBotBubble("Configurando "+curIp+" -> "+newIp+"...");
+        ThreadPool.QueueUserWorkItem(delegate(object st){
+            bool reachable; string adapter=FindAdapterForSubnet(curIp,out reachable);
+            string tempIp=null; string locIp=GetLocalIp(curIp);
+            if(!reachable){
+                if(adapter==null){
+                    BeginInvoke((Action)(()=>{ AddBotBubble("Seu PC nao esta na rede de "+curIp+" e nao achei uma placa de rede pra usar."); AddOptions(new ChatOpt("Recomecar",Color.FromArgb(80,80,80),true,()=>StartChat())); }));
+                    return;
+                }
+                tempIp=PickTempIpInSubnet(curIp);
+                BeginInvoke((Action)(()=>AddBotBubble("Seu PC nao esta na mesma rede dela — vou adicionar temporariamente o IP "+tempIp+" na placa \""+adapter+"\" pra conseguir falar com ela.")));
+                if(!AddTempIp(adapter,tempIp,"255.255.255.0")){
+                    BeginInvoke((Action)(()=>{ AddBotBubble("Nao consegui adicionar o IP temporario. Tenta executar o Delitools como Administrador."); AddOptions(new ChatOpt("Recomecar",Color.FromArgb(80,80,80),true,()=>StartChat())); }));
+                    return;
+                }
+                System.Threading.Thread.Sleep(1200);
+                locIp=tempIp;
+            }
+            string r=ApplyNetConfigXP(locIp,curIp,newIp,"255.255.255.0","0.0.0.0",false);
+            if(tempIp!=null){ tempIpActive=tempIp; tempIpAdapter=adapter; r+="\n\nIP temporario "+tempIp+" mantido na placa \""+adapter+"\" ate confirmar — va em Config IP > \"Verificar e Remover IP Temporario\" apos reiniciar a impressora."; }
+            BeginInvoke((Action)(()=>{ AddBotBubble(r); AddOptions(new ChatOpt("Recomecar",Color.FromArgb(80,80,80),true,()=>StartChat())); }));
+        });
+    }
+
+    void BuildAssistantPage(){
+        var pg=pages[8]; PageHeader(pg,"Assistente","Converse com o assistente pra trocar o IP da impressora — ele automatiza tudo, ou abre a ferramenta certa se voce preferir fazer na mao.");
+        int chatH=FH-95-12;
+        var cChat=Card(CM,95,CW-CM*2,chatH); pg.Controls.Add(cChat);
+        CardHdr(cChat,"Assistente de Configuracao de IP");
+        chatWidth=cChat.Width-20;
+        pnlChatLog=new Panel{Location=new Point(10,38),Size=new Size(cChat.Width-20,cChat.Height-84),BackColor=Ccard,AutoScroll=true,BorderStyle=BorderStyle.FixedSingle};
+        cChat.Controls.Add(pnlChatLog);
+        var btnRestart=Btn("Recomecar Conversa",new Point(10,cChat.Height-38),new Size(170,30),Color.FromArgb(80,80,80));
+        btnRestart.Click+=(s,e)=>StartChat();
+        cChat.Controls.Add(btnRestart);
+        StartChat();
+    }
+
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }
 
     List<string> GetNetToolBrands(){
@@ -1380,6 +1545,20 @@ class MainForm : Form {
         try{ if(Directory.Exists(netToolsRoot)) foreach(var d in Directory.GetDirectories(netToolsRoot)) list.Add(Path.GetFileName(d)); }catch{}
         list.Sort();
         return list;
+    }
+
+    // ── Marcas: protocolo nativo vs ferramenta de terceiro (compartilhado entre o
+    //    Assistente Guiado da tela Config IP e a tela de Chat) ─────────────────
+    static readonly string[] NativeProtocolBrands=new string[]{"XPrinter","Epson","Elgin","Bematech"};
+    static readonly HashSet<string> AutoConfigBrands=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"BIXOLON"};
+    bool BrandIsNative(string b){ foreach(var n in NativeProtocolBrands) if(n.Equals(b,StringComparison.OrdinalIgnoreCase)) return true; return false; }
+    string BrandToolFolder(string b){ foreach(var f in GetNetToolBrands()) if(f.Equals(b,StringComparison.OrdinalIgnoreCase)) return f; return null; }
+    List<string> GetAllBrandNames(){
+        var outp=new List<string>();
+        foreach(var b in NativeProtocolBrands) outp.Add(b);
+        foreach(var f in GetNetToolBrands()){ bool dup=false; foreach(var o in outp) if(o.Equals(f,StringComparison.OrdinalIgnoreCase)){dup=true;break;} if(!dup) outp.Add(f); }
+        outp.Sort();
+        return outp;
     }
 
     List<string> GetNetToolFiles(string brand){
