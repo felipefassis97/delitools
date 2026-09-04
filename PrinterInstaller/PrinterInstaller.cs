@@ -1,4 +1,4 @@
-// Delitools v2.1.5
+// Delitools v2.2.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -58,8 +58,56 @@ class MainForm : Form {
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Ansi)]
     struct DOCINFOA { [MarshalAs(UnmanagedType.LPStr)] public string pDocName; [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile; [MarshalAs(UnmanagedType.LPStr)] public string pDataType; }
 
+    // ── Automacao de UI (ferramentas de fabricante sem protocolo nativo) ──────
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd,int Msg,IntPtr wParam,IntPtr lParam);
+    [DllImport("user32.dll",EntryPoint="SendMessage")] static extern IntPtr SendMessageLV(IntPtr hWnd,int Msg,IntPtr wParam,ref LVITEM lParam);
+    [DllImport("user32.dll",CharSet=CharSet.Auto)] static extern int GetWindowText(IntPtr hWnd,System.Text.StringBuilder text,int count);
+    [DllImport("user32.dll",CharSet=CharSet.Auto)] static extern int GetClassNameW(IntPtr hWnd,System.Text.StringBuilder text,int count);
+    [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hWndParent,EnumChildProc lpEnumFunc,IntPtr lParam);
+    delegate bool EnumChildProc(IntPtr hWnd,IntPtr lParam);
+    const int BM_CLICK=0x00F5;
+    const int WM_GETTEXT=0x000D, WM_SETTEXT=0x000C;
+    const int LVM_GETITEMCOUNT=0x1004, LVM_SETITEMSTATE=0x102B;
+    const int LVIF_STATE=0x0008, LVIS_SELECTED=0x0002, LVIS_FOCUSED=0x0001;
+    const int IPM_SETADDRESS=0x0466, IPM_GETADDRESS=0x0467;
+    [StructLayout(LayoutKind.Sequential)]
+    struct LVITEM{ public int mask,iItem,iSubItem,state,stateMask; public IntPtr pszText; public int cchTextMax,iImage; public IntPtr lParam; public int iIndent; }
+
+    struct WinInfo{ public IntPtr Handle,Parent; public string ClassName,Text; public int Id; }
+
+    // Enumera TODA a arvore de janelas-filhas (recursivo) — usado em vez de FindWindowEx por
+    // titulo, que se mostrou pouco confiavel contra dialogos MFC antigos (paginas de aba
+    // reaproveitam a mesma classe "#32770" varias vezes e o titulo exato as vezes nao bate).
+    List<WinInfo> EnumAllChildren(IntPtr root){
+        var list=new List<WinInfo>();
+        EnumChildWindows(root,(h,l)=>{
+            var cls=new System.Text.StringBuilder(256); GetClassNameW(h,cls,256);
+            var txt=new System.Text.StringBuilder(256); GetWindowText(h,txt,256);
+            list.Add(new WinInfo{Handle=h,Parent=GetParent(h),ClassName=cls.ToString(),Text=txt.ToString(),Id=GetDlgCtrlID(h)});
+            return true;
+        },IntPtr.Zero);
+        return list;
+    }
+    IntPtr FindByText(List<WinInfo> all,string text){ foreach(var w in all) if(w.Text==text) return w.Handle; return IntPtr.Zero; }
+    IntPtr FindByIdParent(List<WinInfo> all,IntPtr parent,int id){ foreach(var w in all) if(w.Parent==parent&&w.Id==id) return w.Handle; return IntPtr.Zero; }
+    string GetCtrlText(IntPtr h){ var sb=new System.Text.StringBuilder(256); GetWindowText(h,sb,256); return sb.ToString(); }
+    void ClickCtrl(IntPtr h){ SendMessage(h,BM_CLICK,IntPtr.Zero,IntPtr.Zero); }
+    void SetIpControl(IntPtr h,string ip){
+        var parts=ip.Split('.'); if(parts.Length!=4) return;
+        byte b1,b2,b3,b4;
+        byte.TryParse(parts[0],out b1); byte.TryParse(parts[1],out b2); byte.TryParse(parts[2],out b3); byte.TryParse(parts[3],out b4);
+        int packed=(b1<<24)|(b2<<16)|(b3<<8)|b4;
+        SendMessage(h,IPM_SETADDRESS,IntPtr.Zero,(IntPtr)packed);
+    }
+    void SelectFirstListItem(IntPtr hList){
+        var it=new LVITEM{mask=LVIF_STATE,iItem=0,iSubItem=0,state=LVIS_SELECTED|LVIS_FOCUSED,stateMask=LVIS_SELECTED|LVIS_FOCUSED};
+        SendMessageLV(hList,LVM_SETITEMSTATE,(IntPtr)0,ref it);
+    }
+
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.1.5";
+    const string APP_VERSION     = "2.2.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -126,7 +174,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(0); RefreshStatus(); Log("Delitools v2.1.5 iniciado.");
+        ShowPage(0); RefreshStatus(); Log("Delitools v2.2.0 iniciado.");
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -170,7 +218,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.1.5", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.2.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP"};
@@ -1122,14 +1170,21 @@ class MainForm : Form {
         cTools.Controls.Add(cmbToolFile);
         var btnOpenTool=Btn("Abrir",new Point(cTools.Width-160,70),new Size(70,26),Cacc);
         var btnOpenFolder=Btn("Abrir Pasta",new Point(cTools.Width-84,70),new Size(74,26),Color.FromArgb(80,80,80));
-        cTools.Controls.AddRange(new Control[]{btnOpenTool,btnOpenFolder});
+        var btnAutoConfig=Btn("Automatizar (Beta)",new Point(700,70),new Size(150,26),Corange);
+        cTools.Controls.AddRange(new Control[]{btnOpenTool,btnOpenFolder,btnAutoConfig});
         var lblToolsStatus=new Label{Text="",Font=new Font("Segoe UI",8),ForeColor=Csub,Location=new Point(10,106),Size=new Size(cTools.Width-20,18),AutoSize=false};
         cTools.Controls.Add(lblToolsStatus);
+        // Marcas com automacao de UI implementada (clica sozinho na ferramenta do fabricante).
+        // So funciona pra impressora ligada por cabo Ethernet direto no PC, mesma exigencia da
+        // aba "Via Ethernet" acima — as ferramentas de fabricante buscam na rede local.
+        var autoConfigSupported=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"BIXOLON"};
+        Action updateAutoBtn=()=>{ btnAutoConfig.Enabled=cmbToolBrand.SelectedItem!=null&&autoConfigSupported.Contains(cmbToolBrand.SelectedItem.ToString()); };
         Action refreshToolBrands=()=>{
             cmbToolBrand.Items.Clear(); cmbToolFile.Items.Clear();
             foreach(var b in GetNetToolBrands()) cmbToolBrand.Items.Add(b);
             if(cmbToolBrand.Items.Count>0){ cmbToolBrand.SelectedIndex=0; lblToolsStatus.Text=""; }
             else lblToolsStatus.Text="Nenhuma pasta em NetConfigTools ainda. Clique em \"Abrir Pasta\" e crie uma subpasta com o nome da marca (ex: Selton) com o .exe dela dentro.";
+            updateAutoBtn();
         };
         cmbToolBrand.SelectedIndexChanged+=(s,e)=>{
             cmbToolFile.Items.Clear();
@@ -1137,6 +1192,7 @@ class MainForm : Form {
             foreach(var f in GetNetToolFiles(cmbToolBrand.SelectedItem.ToString())) cmbToolFile.Items.Add(f);
             if(cmbToolFile.Items.Count>0){ cmbToolFile.SelectedIndex=0; lblToolsStatus.Text=""; }
             else lblToolsStatus.Text="Nenhum .exe/.msi encontrado nessa pasta.";
+            updateAutoBtn();
         };
         btnOpenTool.Click+=(s,e)=>{
             if(cmbToolBrand.SelectedItem==null||cmbToolFile.SelectedItem==null){ lblToolsStatus.Text="Selecione a marca e a ferramenta."; lblToolsStatus.ForeColor=Cerr; return; }
@@ -1148,7 +1204,173 @@ class MainForm : Form {
             try{ if(!Directory.Exists(netToolsRoot)) Directory.CreateDirectory(netToolsRoot); Process.Start("explorer.exe",netToolsRoot); }
             catch(Exception ex){ lblToolsStatus.Text="Erro ao abrir pasta: "+ex.Message; lblToolsStatus.ForeColor=Cerr; }
         };
+        btnAutoConfig.Click+=(s,e)=>{
+            string ni2=txtNI.Text.Trim(), mk2=txtMk.Text.Trim(), gw3=txtGw.Text.Trim();
+            if(chkDhcp.Checked){ lblToolsStatus.Text="Automacao ainda so cobre IP manual — desmarque DHCP acima."; lblToolsStatus.ForeColor=Cerr; return; }
+            if(!Regex.IsMatch(ni2,@"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")){ lblToolsStatus.Text="Preencha o campo 'Novo IP' (mais acima) antes de automatizar."; lblToolsStatus.ForeColor=Cerr; return; }
+            btnAutoConfig.Enabled=false; lblToolsStatus.Text="Automatizando (Bixolon)... isso abre a ferramenta e clica sozinho, nao mexa na janela dela."; lblToolsStatus.ForeColor=Csub;
+            ThreadPool.QueueUserWorkItem(delegate(object st){
+                string r=AutoConfigBixolon(ni2,mk2.Length>6?mk2:"255.255.255.0",gw3.Length>6?gw3:"0.0.0.0");
+                BeginInvoke((Action)(()=>{ lblToolsStatus.Text=r; lblToolsStatus.ForeColor=r.StartsWith("OK")?Cacc:Cerr; btnAutoConfig.Enabled=true; }));
+            });
+        };
         refreshToolBrands();
+
+        // === Assistente guiado (pergunta marca, oferece manual/automatico, pede o cabo) ===
+        var cWiz=Card(CM+cw+CG,95,CW-CM*2-cw-CG,cardH); pg.Controls.Add(cWiz);
+        CardHdr(cWiz,"Assistente Guiado");
+        var pnlWiz=new Panel{Location=new Point(10,36),Size=new Size(cWiz.Width-20,cWiz.Height-46),BackColor=Color.Transparent};
+        cWiz.Controls.Add(pnlWiz);
+
+        string[] nativeBrands=new string[]{"XPrinter","Epson","Elgin","Bematech"};
+        Func<string,bool> brandIsNative=(b)=>{ foreach(var n in nativeBrands) if(n.Equals(b,StringComparison.OrdinalIgnoreCase)) return true; return false; };
+        Func<string,string> brandToolFolder=(b)=>{ foreach(var f in GetNetToolBrands()) if(f.Equals(b,StringComparison.OrdinalIgnoreCase)) return f; return null; };
+        Func<List<string>> wizBrandList=()=>{
+            var outp=new List<string>();
+            foreach(var b in nativeBrands) outp.Add(b);
+            foreach(var f in GetNetToolBrands()){ bool dup=false; foreach(var o in outp) if(o.Equals(f,StringComparison.OrdinalIgnoreCase)){dup=true;break;} if(!dup) outp.Add(f); }
+            outp.Sort();
+            return outp;
+        };
+
+        int wizStep=0; string wizBrand=null,wizMode=null;
+        Action renderWizard=null;
+        renderWizard=()=>{
+            pnlWiz.Controls.Clear();
+            int yy=0; int ww=pnlWiz.Width;
+            Action<string,int,FontStyle,Color> addTxt=(t,h,fs,col)=>{ pnlWiz.Controls.Add(new Label{Text=t,Font=new Font("Segoe UI",8.5f,fs),ForeColor=col,Location=new Point(0,yy),Size=new Size(ww,h),AutoSize=false}); yy+=h+6; };
+            Action<string,Color,bool,Action> addBtn=(t,col,enabled,onClick)=>{
+                var b=Btn(t,new Point(0,yy),new Size(ww,32),col); b.Enabled=enabled; if(onClick!=null) b.Click+=(s,e)=>onClick();
+                pnlWiz.Controls.Add(b); yy+=38;
+            };
+
+            if(wizStep==0){
+                addTxt("1. Qual a marca da impressora?",30,FontStyle.Bold,Ctxt);
+                foreach(var b in wizBrandList()){
+                    string bb=b;
+                    addBtn(bb,Color.FromArgb(60,64,72),true,()=>{ wizBrand=bb; wizStep=1; renderWizard(); });
+                }
+            }
+            else if(wizStep==1){
+                addTxt("Marca: "+wizBrand,20,FontStyle.Bold,Ctxt);
+                string toolFolder=brandToolFolder(wizBrand);
+                if(brandIsNative(wizBrand)&&toolFolder==null){
+                    addTxt("Essa marca ja e configurada automaticamente pelo Delitools. Preencha 'Novo IP' a esquerda e clique em 'Aplicar (Set New IP)' — nao precisa de ferramenta externa.",90,FontStyle.Regular,Csub);
+                    addBtn("Recomecar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; renderWizard(); });
+                } else if(toolFolder!=null){
+                    if(brandIsNative(wizBrand)) addTxt("Essa marca tem suporte nativo automatico (campos a esquerda). Pra usar a ferramenta oficial mesmo assim, escolha abaixo:",60,FontStyle.Regular,Csub);
+                    else addTxt("Essa marca nao tem protocolo nativo suportado — precisa da ferramenta oficial do fabricante.",50,FontStyle.Regular,Csub);
+                    addBtn("Manual — eu mesmo configuro",Cblue,true,()=>{ wizMode="manual"; wizStep=2; renderWizard(); });
+                    bool autoOk=autoConfigSupported.Contains(toolFolder);
+                    addBtn(autoOk?"Automatico (Beta)":"Automatico (ainda nao disponivel)",autoOk?Corange:Color.FromArgb(150,150,150),autoOk,()=>{ wizMode="auto"; wizStep=2; renderWizard(); });
+                    addBtn("Voltar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; renderWizard(); });
+                } else {
+                    addTxt("Essa marca nao tem protocolo nativo nem ferramenta cadastrada em NetConfigTools. Adicione a pasta da marca ali embaixo, ou peca pra implementar o protocolo dela.",80,FontStyle.Regular,Cerr);
+                    addBtn("Voltar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; renderWizard(); });
+                }
+            }
+            else if(wizStep==2){
+                addTxt("2. Conecte a impressora "+wizBrand+" por cabo Ethernet direto neste computador (evite passar por switch/roteador, se der) e ligue ela.",80,FontStyle.Regular,Ctxt);
+                addBtn("Ja conectei, continuar",Cacc,true,()=>{ wizStep=3; renderWizard(); });
+                addBtn("Voltar",Color.FromArgb(80,80,80),true,()=>{ wizStep=1; renderWizard(); });
+            }
+            else if(wizStep==3){
+                string toolFolder=brandToolFolder(wizBrand);
+                addTxt("3. "+(wizMode=="manual"?"Configuracao manual":"Configuracao automatica")+" — "+wizBrand,20,FontStyle.Bold,Ctxt);
+                var lblResult=new Label{Text="",Font=new Font("Segoe UI",8.5f),ForeColor=Csub,Location=new Point(0,yy),Size=new Size(ww,100),AutoSize=false};
+                pnlWiz.Controls.Add(lblResult); yy+=106;
+                addBtn("Recomecar",Color.FromArgb(80,80,80),true,()=>{ wizStep=0; wizBrand=null; wizMode=null; renderWizard(); });
+
+                if(wizMode=="manual"){
+                    var files=GetNetToolFiles(toolFolder);
+                    if(files.Count==0){ lblResult.Text="Nenhum executavel encontrado em NetConfigTools\\"+toolFolder+"."; lblResult.ForeColor=Cerr; }
+                    else{
+                        string path=Path.Combine(netToolsRoot,toolFolder,files[0]);
+                        try{ Process.Start(new ProcessStartInfo(path){UseShellExecute=true}); lblResult.Text="Ferramenta aberta ("+files[0]+"). Configure o IP manualmente na janela dela."; lblResult.ForeColor=Cacc; Log("Assistente: ferramenta aberta - "+path); }
+                        catch(Exception ex){ lblResult.Text="Erro ao abrir: "+ex.Message; lblResult.ForeColor=Cerr; }
+                    }
+                } else {
+                    string ni2=txtNI.Text.Trim(), mk2=txtMk.Text.Trim(), gw3=txtGw.Text.Trim();
+                    if(!Regex.IsMatch(ni2,@"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")){
+                        lblResult.Text="Preencha o campo 'Novo IP' na Configuracao de Rede (a esquerda) antes de continuar."; lblResult.ForeColor=Cerr;
+                    } else {
+                        lblResult.Text="Automatizando... isso abre a ferramenta e clica sozinho, nao mexa na janela dela.";
+                        lblResult.ForeColor=Csub;
+                        ThreadPool.QueueUserWorkItem(delegate(object st){
+                            string r=toolFolder.Equals("BIXOLON",StringComparison.OrdinalIgnoreCase)?AutoConfigBixolon(ni2,mk2.Length>6?mk2:"255.255.255.0",gw3.Length>6?gw3:"0.0.0.0"):"Automacao ainda nao implementada pra essa marca.";
+                            BeginInvoke((Action)(()=>{ lblResult.Text=r; lblResult.ForeColor=r.StartsWith("OK")?Cacc:Cerr; }));
+                        });
+                    }
+                }
+            }
+        };
+        renderWizard();
+    }
+
+    // Automatiza o "Net Configuration Tool" da Bixolon: abre, busca a impressora na rede local,
+    // seleciona a primeira encontrada, le o IP atual dela, e grava o IP novo.
+    // Mapeamento da janela (v3.3.1): dialogo "NetConfiguration Tool" > pagina "LAN/WLAN" tem os
+    // controles Search(1159)/Lista(1124)/IP atual(1134)/Configuration(1126); clicar em
+    // Configuration troca pra pagina "Network Configuration" (outro dialogo irmao) com Manual(1041)
+    // + 3 SysIPAddress32 (IP=1119, Mascara=1120, Gateway=1121) + Save(1126).
+    string AutoConfigBixolon(string newIp,string newMask,string newGw){
+        string exe=Path.Combine(netToolsRoot,"BIXOLON","NetConfiguration.exe");
+        if(!File.Exists(exe)) return "Erro: NetConfiguration.exe nao encontrado em NetConfigTools\\BIXOLON.";
+        Process proc=null;
+        try{
+            UILog("Automacao Bixolon: abrindo NetConfiguration.exe...");
+            proc=Process.Start(new ProcessStartInfo(exe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(exe)});
+            IntPtr hMain=IntPtr.Zero;
+            for(int i=0;i<20&&hMain==IntPtr.Zero;i++){ System.Threading.Thread.Sleep(500); proc.Refresh(); hMain=proc.MainWindowHandle; }
+            if(hMain==IntPtr.Zero) return "Erro: a janela da ferramenta nao abriu a tempo.";
+            System.Threading.Thread.Sleep(800);
+
+            var all=EnumAllChildren(hMain);
+            IntPtr hLanWlan=FindByText(all,"LAN/WLAN");
+            if(hLanWlan==IntPtr.Zero) return "Erro: nao reconheci a tela da ferramenta (layout pode ter mudado).";
+            IntPtr hSearch=FindByIdParent(all,hLanWlan,1159);
+            IntPtr hList=FindByIdParent(all,hLanWlan,1124);
+            IntPtr hCurIp=FindByIdParent(all,hLanWlan,1134);
+            IntPtr hConfigBtn=FindByIdParent(all,hLanWlan,1126);
+            if(hSearch==IntPtr.Zero||hList==IntPtr.Zero||hConfigBtn==IntPtr.Zero) return "Erro: nao achei os controles esperados na tela de busca.";
+
+            UILog("Automacao Bixolon: buscando impressora na rede (cabo Ethernet direto)...");
+            ClickCtrl(hSearch);
+            int count=0;
+            for(int i=0;i<12;i++){ System.Threading.Thread.Sleep(1000); count=(int)SendMessage(hList,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero); if(count>0) break; }
+            if(count==0) return "Nenhuma impressora Bixolon encontrada na rede. Confirme que ela esta ligada e conectada por cabo Ethernet direto no PC.";
+
+            SelectFirstListItem(hList);
+            System.Threading.Thread.Sleep(500);
+            string ipAtual=GetCtrlText(hCurIp);
+            UILog("Automacao Bixolon: impressora encontrada, IP atual = "+ipAtual);
+
+            ClickCtrl(hConfigBtn);
+            System.Threading.Thread.Sleep(800);
+            all=EnumAllChildren(hMain); // a tela de configuracao so existe/atualiza apos abrir
+            IntPtr hNetCfg=FindByText(all,"Network Configuration");
+            if(hNetCfg==IntPtr.Zero) return "OK-PARCIAL - Achei a impressora (IP atual "+ipAtual+"), mas a tela de configuracao nao abriu. Termine manualmente na janela aberta.";
+            IntPtr hManual=FindByIdParent(all,hNetCfg,1041);
+            IntPtr hIpCtl=FindByIdParent(all,hNetCfg,1119);
+            IntPtr hMaskCtl=FindByIdParent(all,hNetCfg,1120);
+            IntPtr hGwCtl=FindByIdParent(all,hNetCfg,1121);
+            IntPtr hSave=FindByIdParent(all,hNetCfg,1126);
+            if(hIpCtl==IntPtr.Zero||hSave==IntPtr.Zero) return "OK-PARCIAL - Achei a impressora (IP atual "+ipAtual+"), mas nao reconheci os campos da tela de configuracao. Termine manualmente na janela aberta.";
+
+            if(hManual!=IntPtr.Zero) ClickCtrl(hManual);
+            SetIpControl(hIpCtl,newIp);
+            if(hMaskCtl!=IntPtr.Zero) SetIpControl(hMaskCtl,newMask);
+            if(hGwCtl!=IntPtr.Zero) SetIpControl(hGwCtl,newGw);
+            System.Threading.Thread.Sleep(300);
+            UILog("Automacao Bixolon: gravando "+newIp+"...");
+            ClickCtrl(hSave);
+            System.Threading.Thread.Sleep(1000);
+
+            return "OK - IP anterior: "+ipAtual+". Comando de gravacao enviado para "+newIp+".\n"+
+                   "A impressora pode pedir reinicio pra aplicar — confira na propria ferramenta (deixei a janela aberta) se apareceu alguma confirmacao.";
+        }catch(Exception ex){
+            return "Erro na automacao: "+ex.Message;
+        }
     }
 
     string netToolsRoot { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"NetConfigTools"); } }
