@@ -1,4 +1,4 @@
-// Delitools v2.9.0
+// Delitools v2.10.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.9.0";
+    const string APP_VERSION     = "2.10.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -269,7 +269,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(8); RefreshStatus(); Log("Delitools v2.9.0 iniciado."); // Assistente e a tela inicial
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.10.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -313,7 +313,7 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.9.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.10.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Dely"};
@@ -559,9 +559,31 @@ class MainForm : Form {
         done.Wait(8000);
         for(int host=1;host<=254;host++) if(names[host]!=null){
             string ip=names[host]; string hn=TryReverseDns(ip);
-            found.Add(hn!=null?(ip+"  ("+hn+")  —  porta 9100 aberta"):(ip+"  —  porta 9100 aberta"));
+            bool escPos=TestIsEscPosDevice(ip,9100,1200);
+            string tipo=escPos?"impressora termica confirmada (responde ESC/POS)":"porta 9100 aberta (nao confirmado que e impressora)";
+            found.Add(hn!=null?(ip+"  ("+hn+")  —  "+tipo):(ip+"  —  "+tipo));
         }
         return found;
+    }
+
+    // Confirma que o que esta escutando naquela porta e uma impressora ESC/POS de verdade,
+    // nao so qualquer coisa com a porta aberta (portado do FudoPrintDoctor): manda DLE EOT 1
+    // (pedido de status em tempo real) — uma termica responde pelo menos 1 byte.
+    bool TestIsEscPosDevice(string ip,int port,int timeoutMs){
+        try{
+            using(var client=new System.Net.Sockets.TcpClient()){
+                var iar=client.BeginConnect(ip,port,null,null);
+                if(!iar.AsyncWaitHandle.WaitOne(timeoutMs)) return false;
+                client.EndConnect(iar);
+                var stream=client.GetStream();
+                stream.WriteTimeout=timeoutMs; stream.ReadTimeout=timeoutMs;
+                byte[] probe=new byte[]{0x10,0x04,0x01};
+                stream.Write(probe,0,probe.Length); stream.Flush();
+                System.Threading.Thread.Sleep(250);
+                var buf=new byte[4];
+                try{ return stream.Read(buf,0,4)>0; }catch{ return false; }
+            }
+        }catch{ return false; }
     }
 
     // Resolve o nome do host (NetBIOS/DNS) de um IP, se houver, sem travar muito tempo.
