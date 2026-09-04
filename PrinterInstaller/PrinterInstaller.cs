@@ -1,4 +1,4 @@
-// Delitools v2.4.1
+// Delitools v2.5.0
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -107,7 +107,7 @@ class MainForm : Form {
     }
 
     // ── Layout ───────────────────────────────────────────────
-    const string APP_VERSION     = "2.4.1";
+    const string APP_VERSION     = "2.5.0";
     const string VERSION_URL     = "https://drive.google.com/uc?export=download&id=1PF2Ck2yDEUHwPl7H2BCR5pZjFqde_6Ug";
     const string DOWNLOAD_URL    = "https://drive.google.com/uc?export=download&id=1dbwNxN2R81TCHz1N-tcT4vS2-ohvqFs7";
 
@@ -140,7 +140,12 @@ class MainForm : Form {
     bool connUsb=true; int activePage=0;
 
     // ── Controls ─────────────────────────────────────────────
-    Panel[]  pages,navItems; Label[] navLabels;
+    Panel[]  pages,navItems; Label[] navLabels; int[] navOrder;
+    // Paleta propria do Assistente (chat) — deliberadamente diferente do resto do app,
+    // pra marcar que e o modo principal de uso, mas ainda dentro do mesmo tom profissional.
+    static readonly Color CaiBg    =Color.FromArgb(24,27,43);
+    static readonly Color CaiAccent=Color.FromArgb(88,101,242);
+    static readonly Color CaiBubble=Color.FromArgb(236,238,246);
     ListBox  lstInstalled,lstTest;
     Panel    pnlDetected,pnlUsbInfo,pnlNetInfo,pnlUsbDetect,pnlNetScan;
     Label    lblDetName,lblDetVid,lblNoDetect,lblNetScanStatus;
@@ -175,7 +180,7 @@ class MainForm : Form {
         SuspendLayout(); Build(); ResumeLayout(false); PerformLayout();
         MinimumSize=Size; // nao deixa encolher abaixo do layout desenhado (evita cortar conteudo)
         FormClosing+=(s,e)=>{ if(scalePort!=null&&scalePort.IsOpen){scalePort.Close();scalePort.Dispose();} if(tempIpActive!=null){try{RemoveTempIp(tempIpAdapter,tempIpActive);}catch{}} };
-        ShowPage(0); RefreshStatus(); Log("Delitools v2.4.1 iniciado.");
+        ShowPage(8); RefreshStatus(); Log("Delitools v2.5.0 iniciado."); // Assistente e a tela inicial
         refreshTimer=new System.Windows.Forms.Timer(); refreshTimer.Interval=8000;
         refreshTimer.Tick+=(s,e)=>RefreshStatus(); refreshTimer.Start();
         ThreadPool.QueueUserWorkItem(delegate(object state){
@@ -219,23 +224,29 @@ class MainForm : Form {
         var logo=new Panel{Location=new Point(0,0),Size=new Size(SW,108),BackColor=Cside};
         logo.Controls.Add(Lbl("Deli",   new Font("Segoe UI",14,FontStyle.Bold),Color.White, new Point(16,10),new Size(200,26)));
         logo.Controls.Add(Lbl("tools",  new Font("Segoe UI",14,FontStyle.Bold),Cacc,        new Point(58,10),new Size(200,26)));
-        logo.Controls.Add(Lbl("v2.4.1", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
+        logo.Controls.Add(Lbl("v2.5.0", new Font("Segoe UI",7.5f),             CsideT,      new Point(16,40),new Size(70,14)));
         logo.Controls.Add(new Panel{Location=new Point(0,104),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58)});
         sb.Controls.Add(logo);
         string[] lbl=new string[]{"Instalar Impressora","Impressoras Instaladas","Detectar Impressoras","Corrigir Impressao","Ferramentas","Imprimir Teste","Balancas","Config IP","Assistente"};
-        navItems=new Panel[lbl.Length]; navLabels=new Label[lbl.Length];
-        for(int i=0;i<lbl.Length;i++){
-            int idx=i;
-            var acc=new Panel{Location=new Point(0,0),Size=new Size(4,44),BackColor=Color.Transparent};
-            var num=Lbl((i+1).ToString(),new Font("Segoe UI",8,FontStyle.Bold),Cacc,  new Point(16,13),new Size(20,18));
-            var tx =Lbl(lbl[i],          new Font("Segoe UI",9),               CsideT,new Point(44,13),new Size(188,18));
-            var item=new Panel{Location=new Point(0,108+i*44),Size=new Size(SW,44),BackColor=Cside,Cursor=Cursors.Hand};
+        // Assistente (indice 8) vem primeiro no menu — e o jeito principal de usar o app —
+        // sem reordenar pages[]/lbl[] (evita ter que caçar todo indice hardcoded no resto do
+        // codigo). navOrder[posicao visual] = indice real da pagina.
+        navOrder=new int[]{8,0,1,2,3,4,5,6,7};
+        navItems=new Panel[navOrder.Length]; navLabels=new Label[navOrder.Length];
+        for(int pos=0;pos<navOrder.Length;pos++){
+            int idx=navOrder[pos];
+            bool isAssistant=idx==8;
+            var acc=new Panel{Location=new Point(0,0),Size=new Size(4,44),BackColor=isAssistant?CaiAccent:Color.Transparent};
+            var num=Lbl((pos+1).ToString(),new Font("Segoe UI",8,FontStyle.Bold),isAssistant?CaiAccent:Cacc,new Point(16,13),new Size(20,18));
+            var tx =Lbl(lbl[idx],new Font("Segoe UI",9,isAssistant?FontStyle.Bold:FontStyle.Regular),isAssistant?Color.White:CsideT,new Point(44,13),new Size(188,18));
+            var item=new Panel{Location=new Point(0,108+pos*44),Size=new Size(SW,44),BackColor=Cside,Cursor=Cursors.Hand};
             item.Controls.AddRange(new Control[]{acc,num,tx});
             item.MouseEnter+=(s,e)=>{ if(activePage!=idx)item.BackColor=CsideH; };
             item.MouseLeave+=(s,e)=>{ if(activePage!=idx)item.BackColor=Cside; };
             item.Click+=(s,e)=>ShowPage(idx);
             foreach(Control c in item.Controls){ var cap=idx; c.MouseEnter+=(s,e)=>{ if(activePage!=cap)item.BackColor=CsideH; }; c.MouseLeave+=(s,e)=>{ if(activePage!=cap)item.BackColor=Cside; }; c.Click+=(s,e)=>ShowPage(cap); }
-            navItems[i]=item; navLabels[i]=tx; sb.Controls.Add(item);
+            navItems[pos]=item; navLabels[pos]=tx; sb.Controls.Add(item);
+            if(isAssistant) sb.Controls.Add(new Panel{Location=new Point(10,108+44),Size=new Size(SW-20,1),BackColor=Color.FromArgb(40,45,58)});
         }
         int sy=FH-148;
         sb.Controls.Add(new Panel{Location=new Point(0,sy),Size=new Size(SW,1),BackColor=Color.FromArgb(40,45,58),Anchor=AnchorStyles.Bottom|AnchorStyles.Left});
@@ -252,7 +263,12 @@ class MainForm : Form {
 
     void SetActiveNav(int idx){
         activePage=idx;
-        for(int i=0;i<navItems.Length;i++){bool on=i==idx; navItems[i].BackColor=on?CsideH:Cside; navLabels[i].ForeColor=on?Color.White:CsideT; navItems[i].Controls[0].BackColor=on?Cacc:Color.Transparent;}
+        for(int i=0;i<navItems.Length;i++){
+            bool on=navOrder[i]==idx; bool isAssistant=navOrder[i]==8;
+            navItems[i].BackColor=on?CsideH:Cside;
+            navLabels[i].ForeColor=on||isAssistant?Color.White:CsideT;
+            navItems[i].Controls[0].BackColor=on?(isAssistant?CaiAccent:Cacc):(isAssistant?CaiAccent:Color.Transparent);
+        }
     }
     void ShowPage(int idx){
         SetActiveNav(idx);
@@ -1378,7 +1394,7 @@ class MainForm : Form {
     void AddBotBubble(string text){
         int bw=(int)(chatWidth*0.74); var f=new Font("Segoe UI",9);
         int h=MeasureTextHeight(text,f,bw-24)+22;
-        var p=new Panel{Location=new Point(4,chatY),Size=new Size(bw,h),BackColor=Color.FromArgb(238,240,242)};
+        var p=new Panel{Location=new Point(4,chatY),Size=new Size(bw,h),BackColor=CaiBubble};
         p.Region=Region.FromHrgn(CreateRoundRectRgn(0,0,bw,h,14,14));
         p.Controls.Add(new Label{Text=text,Font=f,ForeColor=Ctxt,Location=new Point(12,10),Size=new Size(bw-24,h-20),AutoSize=false});
         pnlChatLog.Controls.Add(p); chatY+=h+12; ChatScrollToBottom(p);
@@ -1386,7 +1402,7 @@ class MainForm : Form {
     void AddUserBubble(string text){
         int bw=(int)(chatWidth*0.74); var f=new Font("Segoe UI",9,FontStyle.Bold);
         int h=MeasureTextHeight(text,f,bw-24)+22;
-        var p=new Panel{Location=new Point(chatWidth-bw-4,chatY),Size=new Size(bw,h),BackColor=Cacc};
+        var p=new Panel{Location=new Point(chatWidth-bw-4,chatY),Size=new Size(bw,h),BackColor=CaiAccent};
         p.Region=Region.FromHrgn(CreateRoundRectRgn(0,0,bw,h,14,14));
         p.Controls.Add(new Label{Text=text,Font=f,ForeColor=Color.White,Location=new Point(12,10),Size=new Size(bw-24,h-20),AutoSize=false});
         pnlChatLog.Controls.Add(p); chatY+=h+12; ChatScrollToBottom(p);
@@ -1408,7 +1424,7 @@ class MainForm : Form {
     void AddTextPrompt(string hint,Action<string> onSubmit){
         int bw=(int)(chatWidth*0.74);
         var tb=new TextBox{Location=new Point(4,chatY+2),Size=new Size(bw-72,26),Font=new Font("Segoe UI",9)};
-        var btn=Btn("Enviar",new Point(4+bw-64,chatY),new Size(64,30),Cacc);
+        var btn=Btn("Enviar",new Point(4+bw-64,chatY),new Size(64,30),CaiAccent);
         pnlChatLog.Controls.Add(tb); pnlChatLog.Controls.Add(btn); chatY+=40;
         Action submit=()=>{
             string v=tb.Text.Trim(); if(v.Length==0) return;
@@ -1722,9 +1738,19 @@ class MainForm : Form {
         var pg=pages[8]; PageHeader(pg,"Assistente","Converse com o assistente pra instalar impressora, corrigir problemas, configurar IP e mais — ele automatiza tudo, ou te leva pro caminho manual se preferir.");
         int chatH=FH-95-12;
         var cChat=Card(CM,95,CW-CM*2,chatH); pg.Controls.Add(cChat);
-        CardHdr(cChat,"Assistente de Configuracao de IP");
+        // Header proprio (escuro, com indicador de status) — visual diferente do resto do app,
+        // marcando que essa e a tela principal, mas ainda dentro do mesmo tom profissional.
+        int headerH=48;
+        var header=new Panel{Location=new Point(0,0),Size=new Size(cChat.Width,headerH),BackColor=CaiBg};
+        header.Controls.Add(Lbl("Assistente Delitools",new Font("Segoe UI",11,FontStyle.Bold),Color.White,new Point(16,8),new Size(320,22)));
+        var dot=Lbl("●",new Font("Segoe UI",8),Color.FromArgb(70,220,140),new Point(16,30),new Size(16,14));
+        var onlineTxt=Lbl("Pronto pra ajudar",new Font("Segoe UI",7.5f),Color.FromArgb(170,175,200),new Point(30,31),new Size(220,14));
+        header.Controls.AddRange(new Control[]{dot,onlineTxt});
+        cChat.Controls.Add(header);
+
         chatWidth=cChat.Width-20;
-        pnlChatLog=new Panel{Location=new Point(10,38),Size=new Size(cChat.Width-20,cChat.Height-84),BackColor=Ccard,AutoScroll=true,BorderStyle=BorderStyle.FixedSingle};
+        int listTop=headerH+10;
+        pnlChatLog=new Panel{Location=new Point(10,listTop),Size=new Size(cChat.Width-20,cChat.Height-listTop-46),BackColor=Ccard,AutoScroll=true,BorderStyle=BorderStyle.FixedSingle};
         cChat.Controls.Add(pnlChatLog);
         var btnRestart=Btn("Recomecar Conversa",new Point(10,cChat.Height-38),new Size(170,30),Color.FromArgb(80,80,80));
         btnRestart.Click+=(s,e)=>StartChat();
