@@ -9,6 +9,8 @@ PrinterInstaller/DelitoolsPortavel/
 # Configuracoes locais do Claude Code (especificas desta maquina)
 .claude/settings.local.json
 
-# URL de telemetria (endpoint de escrita) — nunca vai pro repositorio publico
-PrinterInstaller/telemetria.txt
-telemetria.txt
+# URL de telemetria (endpoint de escrita) — nunca vai pro repositorio publico.
+# Pega tambem a variante "telemetria.txt.txt" que o Notepad cria quando "ocultar
+# extensoes de arquivos conhecidos" esta ativado no Windows (ja aconteceu uma vez).
+telemetria.txt*
+PrinterInstaller/telemetria.txt*
